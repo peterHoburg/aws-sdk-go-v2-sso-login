@@ -29,7 +29,8 @@ type ConfigProfile struct {
 	ssoStartUrl  string
 }
 
-func GetCreds(ctx context.Context, profileName string, headed bool) (*aws.Credentials, error) {
+// TODO figure out the correct timeout type. time.duration?
+func GetCreds(ctx context.Context, profileName string, headed bool, loginTimeoutSeconds int) (*aws.Credentials, error) {
 	//Check the sso cache for the given profile to see if there is already a set of OIDC creds
 	configProfile, err := getConfigProfile(profileName)
 	if err != nil {
@@ -38,7 +39,7 @@ func GetCreds(ctx context.Context, profileName string, headed bool) (*aws.Creden
 
 	accessToken, err := getAwsCredsFromCache(ctx, configProfile)
 	if err != nil {
-		accessToken, err = ssoLoginFlow(ctx, configProfile, headed)
+		accessToken, err = ssoLoginFlow(ctx, configProfile, headed, loginTimeoutSeconds)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +160,7 @@ func getAwsCredsFromCache(ctx context.Context, configProfile *ConfigProfile) (*s
 	return &creds.SessionToken, nil
 }
 
-func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile, headed bool) (*string, error) {
+func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile, headed bool, loginTimeoutSeconds int) (*string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
@@ -203,7 +204,9 @@ func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile, headed bool
 		}
 	}
 	token := new(ssooidc.CreateTokenOutput)
-	for i := 0; i < 10; i++ {
+	tries := 10
+	sleepPerCycle := loginTimeoutSeconds / tries
+	for i := 0; i < tries; i++ {
 		// Keep trying until the user approves the request in the browser
 		token, err = ssoOidcClient.CreateToken(context.TODO(), &ssooidc.CreateTokenInput{
 			ClientId:     registerClient.ClientId,
@@ -212,7 +215,7 @@ func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile, headed bool
 			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
 		})
 		if err != nil {
-			time.Sleep(5 * time.Second)
+			time.Sleep(time.Duration(sleepPerCycle) * time.Second)
 		}
 	}
 	if err != nil {
