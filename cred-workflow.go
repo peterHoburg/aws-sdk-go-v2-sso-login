@@ -35,16 +35,23 @@ func GetCreds(ctx context.Context, profileName string, headed bool, loginTimeout
 	if err != nil {
 		return nil, err
 	}
-
-	accessToken, err := getAwsCredsFromCache(ctx, configProfile)
+	cfg, err := config.LoadDefaultConfig(
+		ctx,
+		config.WithSharedConfigProfile(configProfile.name),
+	)
 	if err != nil {
-		accessToken, err = ssoLoginFlow(ctx, configProfile, headed, loginTimeout)
+		return nil, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
+	}
+
+	accessToken, err := getAwsCredsFromCache(ctx, &cfg, configProfile)
+	if err != nil {
+		accessToken, err = ssoLoginFlow(&cfg, configProfile, headed, loginTimeout)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	creds, err := getRoleCreds(ctx, accessToken, configProfile)
+	creds, err := getRoleCreds(ctx, &cfg, accessToken, configProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -126,17 +133,10 @@ func getConfigProfile(profileName string) (*ConfigProfile, error) {
 
 }
 
-func getAwsCredsFromCache(ctx context.Context, configProfile *ConfigProfile) (*string, error) {
-	cfg, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithSharedConfigProfile(configProfile.name),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
-	}
+func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *ConfigProfile) (*string, error) {
 
-	ssoClient := sso.NewFromConfig(cfg)
-	ssoOidcClient := ssooidc.NewFromConfig(cfg)
+	ssoClient := sso.NewFromConfig(*cfg)
+	ssoOidcClient := ssooidc.NewFromConfig(*cfg)
 	cachedTokenPath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
 	if err != nil {
 		return nil, fmt.Errorf("getAwsCredsFromCache Failed find cached token filepath for profile url %s: %w", configProfile.ssoStartUrl, err)
@@ -156,25 +156,16 @@ func getAwsCredsFromCache(ctx context.Context, configProfile *ConfigProfile) (*s
 	if err != nil {
 		return nil, fmt.Errorf("getAwsCredsFromCache Failed to retrieve creds from ssoCredsProvider: %w", err)
 	}
-	return &creds.SessionToken, nil
+	return &creds.AccessKeyID, nil
 }
 
-func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile, headed bool, loginTimeout time.Duration) (*string, error) {
+func ssoLoginFlow(cfg *aws.Config, configProfile *ConfigProfile, headed bool, loginTimeout time.Duration) (*string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
 	}
 
-	cfg, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithSharedConfigProfile(configProfile.name),
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to read config: %w", err)
-	}
-
-	ssoOidcClient := ssooidc.NewFromConfig(cfg)
+	ssoOidcClient := ssooidc.NewFromConfig(*cfg)
 
 	clientName := fmt.Sprintf("%s-%s-%s", currentUser, configProfile.name, configProfile.ssoRoleName)
 	registerClient, err := ssoOidcClient.RegisterClient(context.TODO(), &ssooidc.RegisterClientInput{
@@ -223,16 +214,8 @@ func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile, headed bool
 	return token.AccessToken, nil
 }
 
-func getRoleCreds(ctx context.Context, accessToken *string, configProfile *ConfigProfile) (*aws.Credentials, error) {
-	cfg, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithSharedConfigProfile(configProfile.name),
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to read config: %w", err)
-	}
-	ssoClient := sso.NewFromConfig(cfg)
+func getRoleCreds(ctx context.Context, cfg *aws.Config, accessToken *string, configProfile *ConfigProfile) (*aws.Credentials, error) {
+	ssoClient := sso.NewFromConfig(*cfg)
 
 	creds, err := ssoClient.GetRoleCredentials(
 		ctx,
