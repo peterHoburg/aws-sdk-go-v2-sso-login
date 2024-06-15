@@ -1,3 +1,6 @@
+// TODO use sts to get caller id and check that the role creds work
+// TODO add tests
+
 package golang_aws_sdk_go_v2_cred_workflow
 
 import (
@@ -26,7 +29,7 @@ type ConfigProfile struct {
 	ssoStartUrl  string
 }
 
-func GetCreds(ctx context.Context, profileName string) (*aws.Credentials, error) {
+func GetCreds(ctx context.Context, profileName string, headed bool) (*aws.Credentials, error) {
 	//Check the sso cache for the given profile to see if there is already a set of OIDC creds
 	configProfile, err := getConfigProfile(profileName)
 	if err != nil {
@@ -35,7 +38,7 @@ func GetCreds(ctx context.Context, profileName string) (*aws.Credentials, error)
 
 	accessToken, err := getAwsCredsFromCache(ctx, configProfile)
 	if err != nil {
-		accessToken, err = ssoLoginFlow(ctx, configProfile)
+		accessToken, err = ssoLoginFlow(ctx, configProfile, headed)
 		if err != nil {
 			return nil, err
 		}
@@ -46,8 +49,6 @@ func GetCreds(ctx context.Context, profileName string) (*aws.Credentials, error)
 		return nil, err
 	}
 	return creds, nil
-	// TODO use sts to get caller id and check that the role creds work
-
 }
 
 func getConfigProfile(profileName string) (*ConfigProfile, error) {
@@ -158,7 +159,7 @@ func getAwsCredsFromCache(ctx context.Context, configProfile *ConfigProfile) (*s
 	return &creds.SessionToken, nil
 }
 
-func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile) (*string, error) {
+func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile, headed bool) (*string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
@@ -195,7 +196,12 @@ func ssoLoginFlow(ctx context.Context, configProfile *ConfigProfile) (*string, e
 	}
 
 	authUrl := aws.ToString(deviceAuth.VerificationUriComplete)
-	err = browser.OpenURL(authUrl)
+	if headed == true {
+		err = browser.OpenURL(authUrl)
+		if err != nil {
+			return nil, fmt.Errorf("ssoLoginFlow Failed to open browser: %w", err)
+		}
+	}
 	token := new(ssooidc.CreateTokenOutput)
 	for i := 0; i < 10; i++ {
 		// Keep trying until the user approves the request in the browser
