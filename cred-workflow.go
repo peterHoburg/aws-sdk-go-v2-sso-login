@@ -1,13 +1,19 @@
 // TODO use sts to get caller id and check that the role creds work
 // TODO add tests
 // TODO fix context.TODO()
+// TODO add aws.newCredentialsCache(provider)
+// TODO return the provider/config and rename GetCreds?
+// TODO if the ~/.aws/sso/cache is not there, a new one is not being created. Can the newCredentialsCache do that or
+//		do you need to dump to json, compute the sha1 and do it by hand?
 
 package golang_aws_sdk_go_v2_cred_workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"gopkg.in/ini.v1"
 	"os/user"
 	"strings"
@@ -204,9 +210,14 @@ func ssoLoginFlow(cfg *aws.Config, configProfile *ConfigProfile, headed bool, lo
 			DeviceCode:   deviceAuth.DeviceCode,
 			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
 		})
-		if err != nil {
+		if errors.Is(err, &types.AuthorizationPendingException{}) {
 			time.Sleep(sleepPerCycle)
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("ssoLoginFlow Failed to create token: %w", err)
 		}
+
+		break
 	}
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", err)
