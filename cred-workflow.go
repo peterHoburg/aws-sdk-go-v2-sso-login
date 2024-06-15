@@ -1,5 +1,6 @@
 // TODO use sts to get caller id and check that the role creds work
 // TODO add tests
+// TODO fix context.TODO()
 
 package golang_aws_sdk_go_v2_cred_workflow
 
@@ -43,15 +44,14 @@ func GetCreds(ctx context.Context, profileName string, headed bool, loginTimeout
 		return nil, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
 	}
 
-	accessToken, err := getAwsCredsFromCache(ctx, &cfg, configProfile)
+	creds, err := getAwsCredsFromCache(ctx, &cfg, configProfile)
 	if err != nil {
-		accessToken, err = ssoLoginFlow(&cfg, configProfile, headed, loginTimeout)
+		_, err = ssoLoginFlow(&cfg, configProfile, headed, loginTimeout)
 		if err != nil {
 			return nil, err
 		}
 	}
-
-	creds, err := getRoleCreds(ctx, &cfg, accessToken, configProfile)
+	creds, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func getConfigProfile(profileName string) (*ConfigProfile, error) {
 
 }
 
-func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *ConfigProfile) (*string, error) {
+func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *ConfigProfile) (*aws.Credentials, error) {
 
 	ssoClient := sso.NewFromConfig(*cfg)
 	ssoOidcClient := ssooidc.NewFromConfig(*cfg)
@@ -156,7 +156,7 @@ func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *C
 	if err != nil {
 		return nil, fmt.Errorf("getAwsCredsFromCache Failed to retrieve creds from ssoCredsProvider: %w", err)
 	}
-	return &creds.AccessKeyID, nil
+	return &creds, nil
 }
 
 func ssoLoginFlow(cfg *aws.Config, configProfile *ConfigProfile, headed bool, loginTimeout time.Duration) (*string, error) {
