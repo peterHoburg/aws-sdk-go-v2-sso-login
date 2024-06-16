@@ -63,40 +63,41 @@ type configProfileStruct struct {
 // Login runs through the AWS CLI login flow if there isn't a ~/.aws/sso/cache file with valid creds. If ForceLogin is
 // true then the login flow will always be triggered even if the cache is valid
 func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
-	errorLoginOutput := &LoginOutput{}
 	configProfile, err := getConfigProfile(params.ProfileName)
 	if err != nil {
-		return errorLoginOutput, err
+		return nil, err
 	}
+
 	cfg, err := config.LoadDefaultConfig(
 		ctx,
 		config.WithSharedConfigProfile(configProfile.name),
 	)
 	if err != nil {
-		return errorLoginOutput, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
+		return nil, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
 	}
 
 	var creds *aws.Credentials
 	var credCache *aws.CredentialsCache
-	err = nil
+	var credCacheError error
 
 	if params.ForceLogin == false {
-		creds, credCache, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
+		creds, credCache, credCacheError = getAwsCredsFromCache(ctx, &cfg, configProfile)
 	}
-	if err != nil {
-		_, err = ssoLoginFlow(ctx, &cfg, configProfile, params.Headed, params.LoginTimeout)
+	if credCacheError != nil {
+		token, err := ssoLoginFlow(ctx, &cfg, configProfile, params.Headed, params.LoginTimeout)
 		if err != nil {
-			return errorLoginOutput, err
+			return nil, err
 		}
-		creds, credCache, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
+		creds, err := getAwsCredsFromOidcToken(ctx, &cfg, token, *configProfile)
 		if err != nil {
-			return errorLoginOutput, err
+			return nil, err
+		}
+		cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
+		if err == nil {
+			writeCacheFile(creds, cacheFilePath)
 		}
 	}
-	cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
-	if err == nil {
-		writeCacheFile(creds, cacheFilePath)
-	}
+	creds, credCache, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
 
 	identity, err := getCallerID(ctx, &cfg)
 
@@ -240,6 +241,25 @@ func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *c
 	return &creds, credCache, nil
 }
 
+func getAwsCredsFromOidcToken(ctx context.Context, cfg *aws.Config, oidcToken *string, configProfile configProfileStruct) (*aws.Credentials, error) {
+	ssoClient := sso.NewFromConfig(*cfg)
+	creds, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
+		AccessToken: oidcToken,
+		AccountId:   &configProfile.ssoAccountId,
+		RoleName:    &configProfile.ssoRoleName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getAwsCredsFromOidcToken failed to ssoClient.GetRoleCredentials: %w", err)
+	}
+	return &aws.Credentials{
+		AccessKeyID:     *creds.RoleCredentials.AccessKeyId,
+		SecretAccessKey: *creds.RoleCredentials.SecretAccessKey,
+		SessionToken:    *creds.RoleCredentials.SessionToken,
+		Source:          "",
+		CanExpire:       true,
+		Expires:         time.UnixMilli(creds.RoleCredentials.Expiration),
+	}, nil
+}
 func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *configProfileStruct, headed bool, loginTimeout time.Duration) (*string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
