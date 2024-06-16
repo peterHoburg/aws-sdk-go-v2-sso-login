@@ -1,5 +1,3 @@
-// TODO use sts to get caller id and check that the role creds work aws-sdk-go-v2-sso-login
-
 package aws_sdk_go_v2_sso_login
 
 import (
@@ -22,7 +20,14 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-type ConfigProfile struct {
+type LoginInput struct {
+	ProfileName  string
+	LoginTimeout time.Duration
+	Headed       bool
+	ForceLogin   bool
+}
+
+type configProfileStruct struct {
 	name         string
 	output       string
 	region       string
@@ -32,10 +37,13 @@ type ConfigProfile struct {
 	ssoStartUrl  string
 }
 
-// Login
-func Login(ctx context.Context, profileName string, headed bool, loginTimeout time.Duration) (*aws.Config, *aws.Credentials, *aws.CredentialsCache, error) {
-	//Check the sso cache for the given profile to see if there is already a set of OIDC creds
-	configProfile, err := getConfigProfile(profileName)
+// TODO use sts to get caller id and check that the role creds work aws-sdk-go-v2-sso-login
+
+// Login runs through the AWS CLI login flow if there isn't a ~/.aws/sso/cache file with valid creds. If ForceLogin is
+// true then the login flow will always be triggered even  if the cache is valid
+func Login(ctx context.Context, params *LoginInput) (*aws.Config, *aws.Credentials, *aws.CredentialsCache, error) {
+
+	configProfile, err := getConfigProfile(params.ProfileName)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -47,9 +55,15 @@ func Login(ctx context.Context, profileName string, headed bool, loginTimeout ti
 		return nil, nil, nil, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
 	}
 
-	creds, credCache, err := getAwsCredsFromCache(ctx, &cfg, configProfile)
+	var creds *aws.Credentials
+	var credCache *aws.CredentialsCache
+	err = nil
+
+	if params.ForceLogin == false {
+		creds, credCache, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
+	}
 	if err != nil {
-		_, err = ssoLoginFlow(ctx, &cfg, configProfile, headed, loginTimeout)
+		_, err = ssoLoginFlow(ctx, &cfg, configProfile, params.Headed, params.LoginTimeout)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -66,6 +80,7 @@ func Login(ctx context.Context, profileName string, headed bool, loginTimeout ti
 	return &cfg, creds, credCache, nil
 }
 
+// writeCacheFile Writes the cache file that is read by the AWS CLI.
 func writeCacheFile(creds *aws.Credentials, cacheFilePath string) {
 
 	staticCredentials := aws.Credentials{
@@ -88,7 +103,7 @@ func writeCacheFile(creds *aws.Credentials, cacheFilePath string) {
 
 }
 
-func getConfigProfile(profileName string) (*ConfigProfile, error) {
+func getConfigProfile(profileName string) (*configProfileStruct, error) {
 	defaultSharedConfigFilename := config.DefaultSharedConfigFilename()
 	configFile, err := ini.Load(defaultSharedConfigFilename)
 
@@ -97,7 +112,7 @@ func getConfigProfile(profileName string) (*ConfigProfile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getProfile Failed to load shared config: %w", err)
 	}
-	configProfile := new(ConfigProfile)
+	configProfile := new(configProfileStruct)
 
 	for _, section := range configFile.Sections() {
 		sectionName := strings.TrimSpace(section.Name())
@@ -119,6 +134,7 @@ func getConfigProfile(profileName string) (*ConfigProfile, error) {
 		}
 		configProfile.output = output
 
+		// There has to  be a better way to do the validation/error composition...
 		profileErrorMsg := "getProfile Failed to find %s for profile %s in config file %s"
 
 		region := section.Key("region").Value()
@@ -163,7 +179,8 @@ func getConfigProfile(profileName string) (*ConfigProfile, error) {
 
 }
 
-func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *ConfigProfile) (*aws.Credentials, *aws.CredentialsCache, error) {
+// getAwsCredsFromCache
+func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *configProfileStruct) (*aws.Credentials, *aws.CredentialsCache, error) {
 
 	ssoClient := sso.NewFromConfig(*cfg)
 	ssoOidcClient := ssooidc.NewFromConfig(*cfg)
@@ -190,7 +207,7 @@ func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *C
 	return &creds, credCache, nil
 }
 
-func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *ConfigProfile, headed bool, loginTimeout time.Duration) (*string, error) {
+func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *configProfileStruct, headed bool, loginTimeout time.Duration) (*string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
@@ -248,28 +265,4 @@ func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *ConfigPro
 		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", err)
 	}
 	return token.AccessToken, nil
-}
-
-func getRoleCreds(ctx context.Context, cfg *aws.Config, accessToken *string, configProfile *ConfigProfile) (*aws.Credentials, error) {
-	ssoClient := sso.NewFromConfig(*cfg)
-
-	creds, err := ssoClient.GetRoleCredentials(
-		ctx,
-		&sso.GetRoleCredentialsInput{
-			AccessToken: accessToken,
-			AccountId:   &configProfile.ssoAccountId,
-			RoleName:    &configProfile.ssoRoleName,
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("getRoleCreds failed to GetRoleCredentials %w", err)
-	}
-	awsCreds := aws.Credentials{
-		AccessKeyID:     aws.ToString(creds.RoleCredentials.AccessKeyId),
-		SecretAccessKey: aws.ToString(creds.RoleCredentials.SecretAccessKey),
-		SessionToken:    aws.ToString(creds.RoleCredentials.SessionToken),
-		Expires:         time.UnixMilli(aws.ToInt64(&creds.RoleCredentials.Expiration)),
-		CanExpire:       true,
-	}
-	return &awsCreds, nil
 }
