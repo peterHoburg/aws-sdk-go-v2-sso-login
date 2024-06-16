@@ -21,10 +21,18 @@ import (
 )
 
 type LoginInput struct {
-	ProfileName  string
+	// ProfileName name of the profile in ~/.aws/config. [profile <ProfileName>]
+	ProfileName string
+
+	// LoginTimeout max time to wait for user to complete the SSO OIDC URL flow. This should be > 60 seconds.
 	LoginTimeout time.Duration
-	Headed       bool
-	ForceLogin   bool
+
+	// Headed if true a browser will be opened with the URL for the SSO OIDC flow. You will have the [LoginTimeout] to
+	// complete the flow in the browser.
+	Headed bool
+
+	// ForceLogin if true forces a new SSO OIDC flow even if the cached creds are still valid.
+	ForceLogin bool
 }
 
 type configProfileStruct struct {
@@ -40,7 +48,7 @@ type configProfileStruct struct {
 // TODO use sts to get caller id and check that the role creds work aws-sdk-go-v2-sso-login
 
 // Login runs through the AWS CLI login flow if there isn't a ~/.aws/sso/cache file with valid creds. If ForceLogin is
-// true then the login flow will always be triggered even  if the cache is valid
+// true then the login flow will always be triggered even if the cache is valid
 func Login(ctx context.Context, params *LoginInput) (*aws.Config, *aws.Credentials, *aws.CredentialsCache, error) {
 
 	configProfile, err := getConfigProfile(params.ProfileName)
