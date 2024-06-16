@@ -1,7 +1,6 @@
-// TODO use sts to get caller id and check that the role creds work
-// TODO add tests
+// TODO use sts to get caller id and check that the role creds work aws-sdk-go-v2-sso-login
 
-package golang_aws_sdk_go_v2_cred_workflow
+package aws_sdk_go_v2_sso_login
 
 import (
 	"context"
@@ -33,7 +32,8 @@ type ConfigProfile struct {
 	ssoStartUrl  string
 }
 
-func SsoFlow(ctx context.Context, profileName string, headed bool, loginTimeout time.Duration) (*aws.Config, *aws.Credentials, *aws.CredentialsCache, error) {
+// Login
+func Login(ctx context.Context, profileName string, headed bool, loginTimeout time.Duration) (*aws.Config, *aws.Credentials, *aws.CredentialsCache, error) {
 	//Check the sso cache for the given profile to see if there is already a set of OIDC creds
 	configProfile, err := getConfigProfile(profileName)
 	if err != nil {
@@ -58,17 +58,16 @@ func SsoFlow(ctx context.Context, profileName string, headed bool, loginTimeout 
 			return nil, nil, nil, err
 		}
 	}
-
-	writeCacheFile(creds, configProfile)
+	cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
+	if err == nil {
+		writeCacheFile(creds, cacheFilePath)
+	}
 
 	return &cfg, creds, credCache, nil
 }
 
-func writeCacheFile(creds *aws.Credentials, configProfile *ConfigProfile) {
-	cachedTokenPath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
-	if err != nil {
-		return
-	}
+func writeCacheFile(creds *aws.Credentials, cacheFilePath string) {
+
 	staticCredentials := aws.Credentials{
 		AccessKeyID:     aws.ToString(&creds.AccessKeyID),
 		SecretAccessKey: aws.ToString(&creds.SecretAccessKey),
@@ -82,7 +81,7 @@ func writeCacheFile(creds *aws.Credentials, configProfile *ConfigProfile) {
 		return
 	}
 
-	err = os.WriteFile(cachedTokenPath, marshaledJson, 744)
+	err = os.WriteFile(cacheFilePath, marshaledJson, 744)
 	if err != nil {
 		return
 	}
