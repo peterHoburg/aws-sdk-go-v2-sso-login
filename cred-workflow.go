@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"path"
 	"strings"
 	"time"
 
@@ -88,14 +89,22 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		creds, err := getAwsCredsFromOidcToken(ctx, &cfg, token, *configProfile)
 		if err != nil {
 			return nil, err
 		}
+
 		cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
-		if err == nil {
-			writeCacheFile(creds, cacheFilePath)
+		if err != nil {
+			return nil, err
 		}
+
+		err = writeCacheFile(creds, cacheFilePath)
+		if err != nil {
+			return nil, err
+		}
+
 	}
 	creds, credCache, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
 
@@ -115,7 +124,7 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 }
 
 // writeCacheFile Writes the cache file that is read by the AWS CLI.
-func writeCacheFile(creds *aws.Credentials, cacheFilePath string) {
+func writeCacheFile(creds *aws.Credentials, cacheFilePath string) error {
 
 	staticCredentials := aws.Credentials{
 		AccessKeyID:     aws.ToString(&creds.AccessKeyID),
@@ -127,14 +136,20 @@ func writeCacheFile(creds *aws.Credentials, cacheFilePath string) {
 
 	marshaledJson, err := json.Marshal(staticCredentials)
 	if err != nil {
-		return
+		return fmt.Errorf("writeCacheFile failed to marshal json: %w", err)
+	}
+	dir, _ := path.Split(cacheFilePath)
+	err = os.MkdirAll(dir, 0700)
+	if err != nil {
+		return fmt.Errorf("writeCacheFile failed to write dir %s: %w", dir, err)
 	}
 
 	err = os.WriteFile(cacheFilePath, marshaledJson, 0600)
 	if err != nil {
-		return
-	}
+		return fmt.Errorf("writeCacheFile failed to write file %s: %w", cacheFilePath, err)
 
+	}
+	return nil
 }
 
 func getConfigProfile(profileName string) (*configProfileStruct, error) {
