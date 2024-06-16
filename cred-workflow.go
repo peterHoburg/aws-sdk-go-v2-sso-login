@@ -130,7 +130,7 @@ func writeCacheFile(creds *aws.Credentials, cacheFilePath string) {
 		return
 	}
 
-	err = os.WriteFile(cacheFilePath, marshaledJson, 744)
+	err = os.WriteFile(cacheFilePath, marshaledJson, 0600)
 	if err != nil {
 		return
 	}
