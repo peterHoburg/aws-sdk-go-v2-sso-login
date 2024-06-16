@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/pkg/browser"
 	"gopkg.in/ini.v1"
 )
@@ -37,6 +38,17 @@ type LoginInput struct {
 	ForceLogin bool
 }
 
+// TODO include a sub-struct for identity that includes the error
+
+type LoginOutput struct {
+	Config           *aws.Config
+	Credentials      *aws.Credentials
+	CredentialsCache *aws.CredentialsCache
+
+	// Identity is nil when the stsClient.GetCallerIdentity() failed. This could indicate that the creds are invalid.
+	Identity *sts.GetCallerIdentityOutput
+}
+
 type configProfileStruct struct {
 	name         string
 	output       string
@@ -47,22 +59,20 @@ type configProfileStruct struct {
 	ssoStartUrl  string
 }
 
-// TODO use sts to get caller id and check that the role creds work
-
 // Login runs through the AWS CLI login flow if there isn't a ~/.aws/sso/cache file with valid creds. If ForceLogin is
 // true then the login flow will always be triggered even if the cache is valid
-func Login(ctx context.Context, params *LoginInput) (*aws.Config, *aws.Credentials, *aws.CredentialsCache, error) {
-
+func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
+	errorLoginOutput := &LoginOutput{}
 	configProfile, err := getConfigProfile(params.ProfileName)
 	if err != nil {
-		return nil, nil, nil, err
+		return errorLoginOutput, err
 	}
 	cfg, err := config.LoadDefaultConfig(
 		ctx,
 		config.WithSharedConfigProfile(configProfile.name),
 	)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
+		return errorLoginOutput, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
 	}
 
 	var creds *aws.Credentials
@@ -75,11 +85,11 @@ func Login(ctx context.Context, params *LoginInput) (*aws.Config, *aws.Credentia
 	if err != nil {
 		_, err = ssoLoginFlow(ctx, &cfg, configProfile, params.Headed, params.LoginTimeout)
 		if err != nil {
-			return nil, nil, nil, err
+			return errorLoginOutput, err
 		}
 		creds, credCache, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
 		if err != nil {
-			return nil, nil, nil, err
+			return errorLoginOutput, err
 		}
 	}
 	cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
@@ -87,7 +97,19 @@ func Login(ctx context.Context, params *LoginInput) (*aws.Config, *aws.Credentia
 		writeCacheFile(creds, cacheFilePath)
 	}
 
-	return &cfg, creds, credCache, nil
+	loginOutput := &LoginOutput{
+		Config:           &cfg,
+		Credentials:      creds,
+		CredentialsCache: credCache,
+		Identity:         nil,
+	}
+
+	identity, err := getCallerID(ctx, &cfg)
+	if err == nil {
+		loginOutput.Identity = identity
+	}
+
+	return loginOutput, nil
 }
 
 // writeCacheFile Writes the cache file that is read by the AWS CLI.
@@ -275,4 +297,13 @@ func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *configPro
 		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", err)
 	}
 	return token.AccessToken, nil
+}
+
+func getCallerID(ctx context.Context, cfg *aws.Config) (*sts.GetCallerIdentityOutput, error) {
+	stsClient := sts.NewFromConfig(*cfg)
+	identity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return nil, fmt.Errorf("getCallerID failed to stsClient.GetCallerIdentity: %w", err)
+	}
+	return identity, nil
 }
