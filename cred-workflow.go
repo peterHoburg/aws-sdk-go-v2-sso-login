@@ -1,23 +1,25 @@
-// TODO use sts to get caller id and check that the role creds work
-// TODO add tests
-// TODO fix context.TODO()
+// TODO use sts to get caller id and check that the role creds work aws-sdk-go-v2-sso-login
 
-package golang_aws_sdk_go_v2_cred_workflow
+package aws_sdk_go_v2_sso_login
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
-	"gopkg.in/ini.v1"
+	"os"
 	"os/user"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/pkg/browser"
+	"gopkg.in/ini.v1"
 )
 
 type ConfigProfile struct {
@@ -30,32 +32,60 @@ type ConfigProfile struct {
 	ssoStartUrl  string
 }
 
-func GetCreds(ctx context.Context, profileName string, headed bool, loginTimeout time.Duration) (*aws.Credentials, error) {
+// Login
+func Login(ctx context.Context, profileName string, headed bool, loginTimeout time.Duration) (*aws.Config, *aws.Credentials, *aws.CredentialsCache, error) {
 	//Check the sso cache for the given profile to see if there is already a set of OIDC creds
 	configProfile, err := getConfigProfile(profileName)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	cfg, err := config.LoadDefaultConfig(
 		ctx,
 		config.WithSharedConfigProfile(configProfile.name),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
+		return nil, nil, nil, fmt.Errorf("getAwsCredsFromCache Failed to load aws credentials: %w", err)
 	}
 
-	creds, err := getAwsCredsFromCache(ctx, &cfg, configProfile)
+	creds, credCache, err := getAwsCredsFromCache(ctx, &cfg, configProfile)
 	if err != nil {
-		_, err = ssoLoginFlow(&cfg, configProfile, headed, loginTimeout)
+		_, err = ssoLoginFlow(ctx, &cfg, configProfile, headed, loginTimeout)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
+		}
+		creds, credCache, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
+		if err != nil {
+			return nil, nil, nil, err
 		}
 	}
-	creds, err = getAwsCredsFromCache(ctx, &cfg, configProfile)
-	if err != nil {
-		return nil, err
+	cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
+	if err == nil {
+		writeCacheFile(creds, cacheFilePath)
 	}
-	return creds, nil
+
+	return &cfg, creds, credCache, nil
+}
+
+func writeCacheFile(creds *aws.Credentials, cacheFilePath string) {
+
+	staticCredentials := aws.Credentials{
+		AccessKeyID:     aws.ToString(&creds.AccessKeyID),
+		SecretAccessKey: aws.ToString(&creds.SecretAccessKey),
+		SessionToken:    aws.ToString(&creds.SessionToken),
+		Expires:         time.UnixMilli(creds.Expires.UnixMilli()).UTC(),
+		CanExpire:       true,
+	}
+
+	marshaledJson, err := json.Marshal(staticCredentials)
+	if err != nil {
+		return
+	}
+
+	err = os.WriteFile(cacheFilePath, marshaledJson, 744)
+	if err != nil {
+		return
+	}
+
 }
 
 func getConfigProfile(profileName string) (*ConfigProfile, error) {
@@ -133,13 +163,13 @@ func getConfigProfile(profileName string) (*ConfigProfile, error) {
 
 }
 
-func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *ConfigProfile) (*aws.Credentials, error) {
+func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *ConfigProfile) (*aws.Credentials, *aws.CredentialsCache, error) {
 
 	ssoClient := sso.NewFromConfig(*cfg)
 	ssoOidcClient := ssooidc.NewFromConfig(*cfg)
 	cachedTokenPath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
 	if err != nil {
-		return nil, fmt.Errorf("getAwsCredsFromCache Failed find cached token filepath for profile url %s: %w", configProfile.ssoStartUrl, err)
+		return nil, nil, fmt.Errorf("getAwsCredsFromCache Failed find cached token filepath for profile url %s: %w", configProfile.ssoStartUrl, err)
 	}
 
 	ssoCredsProvider := ssocreds.New(
@@ -152,14 +182,15 @@ func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *C
 		},
 	)
 
-	creds, err := ssoCredsProvider.Retrieve(ctx)
+	credCache := aws.NewCredentialsCache(ssoCredsProvider)
+	creds, err := credCache.Retrieve(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("getAwsCredsFromCache Failed to retrieve creds from ssoCredsProvider: %w", err)
+		return nil, nil, fmt.Errorf("getAwsCredsFromCache Failed to retrieve creds from ssoCredsProvider: %w", err)
 	}
-	return &creds, nil
+	return &creds, credCache, nil
 }
 
-func ssoLoginFlow(cfg *aws.Config, configProfile *ConfigProfile, headed bool, loginTimeout time.Duration) (*string, error) {
+func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *ConfigProfile, headed bool, loginTimeout time.Duration) (*string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
@@ -168,7 +199,7 @@ func ssoLoginFlow(cfg *aws.Config, configProfile *ConfigProfile, headed bool, lo
 	ssoOidcClient := ssooidc.NewFromConfig(*cfg)
 
 	clientName := fmt.Sprintf("%s-%s-%s", currentUser, configProfile.name, configProfile.ssoRoleName)
-	registerClient, err := ssoOidcClient.RegisterClient(context.TODO(), &ssooidc.RegisterClientInput{
+	registerClient, err := ssoOidcClient.RegisterClient(ctx, &ssooidc.RegisterClientInput{
 		ClientName: aws.String(clientName),
 		ClientType: aws.String("public"),
 		Scopes:     []string{"sso-portal:*"},
@@ -177,7 +208,7 @@ func ssoLoginFlow(cfg *aws.Config, configProfile *ConfigProfile, headed bool, lo
 		return nil, fmt.Errorf("ssoLoginFlow Failed to register ssoOidcClient: %w", err)
 	}
 
-	deviceAuth, err := ssoOidcClient.StartDeviceAuthorization(context.TODO(), &ssooidc.StartDeviceAuthorizationInput{
+	deviceAuth, err := ssoOidcClient.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
 		ClientId:     registerClient.ClientId,
 		ClientSecret: registerClient.ClientSecret,
 		StartUrl:     &configProfile.ssoStartUrl,
@@ -198,15 +229,20 @@ func ssoLoginFlow(cfg *aws.Config, configProfile *ConfigProfile, headed bool, lo
 	sleepPerCycle := loginTimeout / time.Duration(tries)
 	for i := 0; i < tries; i++ {
 		// Keep trying until the user approves the request in the browser
-		token, err = ssoOidcClient.CreateToken(context.TODO(), &ssooidc.CreateTokenInput{
+		token, err = ssoOidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
 			ClientId:     registerClient.ClientId,
 			ClientSecret: registerClient.ClientSecret,
 			DeviceCode:   deviceAuth.DeviceCode,
 			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
 		})
-		if err != nil {
+		if errors.Is(err, &types.AuthorizationPendingException{}) {
 			time.Sleep(sleepPerCycle)
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("ssoLoginFlow Failed to create token: %w", err)
 		}
+
+		break
 	}
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", err)

@@ -1,4 +1,4 @@
-module github.com/peterHoburg/golang-aws-sdk-go-v2-cred-workflow
+module github.com/peterHoburg/aws-sdk-go-v2-sso-login
 
 go 1.22.4
 
