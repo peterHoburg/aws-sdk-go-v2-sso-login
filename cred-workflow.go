@@ -62,13 +62,13 @@ type configProfileStruct struct {
 }
 
 type cacheFileData struct {
-	startUrl              string
-	region                string
-	accessToken           string
-	expiresAt             time.Time
-	clientId              string
-	clientSecret          string
-	registrationExpiresAt time.Time
+	StartUrl              string    `json:"startUrl"`
+	Region                string    `json:"region"`
+	AccessToken           string    `json:"accessToken"`
+	ExpiresAt             time.Time `json:"expiresAt"`
+	ClientId              string    `json:"clientId"`
+	ClientSecret          string    `json:"clientSecret"`
+	RegistrationExpiresAt time.Time `json:"registrationExpiresAt"`
 }
 
 // Login runs through the AWS CLI login flow if there isn't a ~/.aws/sso/cache file with valid creds. If ForceLogin is
@@ -137,13 +137,13 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 func writeCacheFile(configProfile *configProfileStruct, creds *aws.Credentials, cacheFilePath string) error {
 
 	staticCredentials := cacheFileData{
-		startUrl:              configProfile.ssoStartUrl,
-		region:                configProfile.region,
-		accessToken:           creds.SessionToken,
-		expiresAt:             time.UnixMilli(creds.Expires.UnixMilli()).UTC(),
-		clientId:              creds.AccessKeyID,
-		clientSecret:          creds.SecretAccessKey,
-		registrationExpiresAt: time.UnixMilli(creds.Expires.UnixMilli()).UTC(),
+		StartUrl:              configProfile.ssoStartUrl,
+		Region:                configProfile.region,
+		AccessToken:           creds.SessionToken,
+		ExpiresAt:             time.UnixMilli(creds.Expires.UnixMilli()).UTC(),
+		ClientId:              creds.AccessKeyID,
+		ClientSecret:          creds.SecretAccessKey,
+		RegistrationExpiresAt: time.UnixMilli(creds.Expires.UnixMilli()).UTC(),
 	}
 
 	marshaledJson, err := json.Marshal(staticCredentials)
