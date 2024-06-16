@@ -5,7 +5,6 @@ package aws_sdk_go_v2_sso_login
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/user"
@@ -17,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
-	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/pkg/browser"
 	"gopkg.in/ini.v1"
@@ -287,14 +285,14 @@ func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *configPro
 			DeviceCode:   deviceAuth.DeviceCode,
 			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
 		})
-		if errors.Is(err, &types.AuthorizationPendingException{}) {
+		if err == nil {
+			break
+		}
+		if strings.Contains(err.Error(), "AuthorizationPendingException") {
 			time.Sleep(sleepPerCycle)
 			continue
-		} else if err != nil {
-			return nil, fmt.Errorf("ssoLoginFlow Failed to create token: %w", err)
 		}
-
-		break
+		return nil, fmt.Errorf("ssoLoginFlow Failed to create token: %w", err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", err)
