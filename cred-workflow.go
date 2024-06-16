@@ -1,3 +1,5 @@
+// Package aws_sdk_go_v2_sso_login THIS IS NOT AN OFFICIAL PART OF aws-sdk-go-v2. This was not created, or endorsed by
+// Amazon, or AWS.
 package aws_sdk_go_v2_sso_login
 
 import (
