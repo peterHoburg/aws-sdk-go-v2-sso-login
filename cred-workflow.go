@@ -45,7 +45,7 @@ type configProfileStruct struct {
 	ssoStartUrl  string
 }
 
-// TODO use sts to get caller id and check that the role creds work aws-sdk-go-v2-sso-login
+// TODO use sts to get caller id and check that the role creds work
 
 // Login runs through the AWS CLI login flow if there isn't a ~/.aws/sso/cache file with valid creds. If ForceLogin is
 // true then the login flow will always be triggered even if the cache is valid
