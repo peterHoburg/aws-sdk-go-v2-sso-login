@@ -38,15 +38,18 @@ type LoginInput struct {
 	ForceLogin bool
 }
 
-// TODO include a sub-struct for identity that includes the error
+// IdentityResult contains the result of stsClient.GetCallerIdentity. If Identity is nul and error is not nul that
+// can indicate that the credentials might be invalid.
+type IdentityResult struct {
+	Identity *sts.GetCallerIdentityOutput
+	Error    error
+}
 
 type LoginOutput struct {
 	Config           *aws.Config
 	Credentials      *aws.Credentials
 	CredentialsCache *aws.CredentialsCache
-
-	// Identity is nil when the stsClient.GetCallerIdentity() failed. This could indicate that the creds are invalid.
-	Identity *sts.GetCallerIdentityOutput
+	IdentityResult   *IdentityResult
 }
 
 type configProfileStruct struct {
@@ -97,16 +100,16 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 		writeCacheFile(creds, cacheFilePath)
 	}
 
+	identity, err := getCallerID(ctx, &cfg)
+
 	loginOutput := &LoginOutput{
 		Config:           &cfg,
 		Credentials:      creds,
 		CredentialsCache: credCache,
-		Identity:         nil,
-	}
-
-	identity, err := getCallerID(ctx, &cfg)
-	if err == nil {
-		loginOutput.Identity = identity
+		IdentityResult: &IdentityResult{
+			Identity: identity,
+			Error:    err,
+		},
 	}
 
 	return loginOutput, nil
