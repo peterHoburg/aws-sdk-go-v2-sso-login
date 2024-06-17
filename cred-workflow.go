@@ -51,7 +51,7 @@ type LoginOutput struct {
 	IdentityResult   *IdentityResult
 }
 
-type configProfileStruct struct {
+type configProfile struct {
 	name         string
 	output       string
 	region       string
@@ -59,6 +59,34 @@ type configProfileStruct struct {
 	ssoRegion    string
 	ssoRoleName  string
 	ssoStartUrl  string
+}
+
+func (v *configProfile) validate(profileName string, defaultSharedConfigFilename string) error {
+	// There has to  be a better way to do the validation/error composition...
+	profileErrorMsg := "configProfile.validate Failed validate %s for profile %s in config file %s"
+
+	if v.name == "" {
+		return fmt.Errorf(profileErrorMsg, "name", profileName, defaultSharedConfigFilename)
+	}
+	if v.output == "" {
+		v.output = "json"
+	}
+	if v.region == "" {
+		return fmt.Errorf(profileErrorMsg, "region", profileName, defaultSharedConfigFilename)
+	}
+	if v.ssoAccountId == "" {
+		return fmt.Errorf(profileErrorMsg, "sso_account_id", profileName, defaultSharedConfigFilename)
+	}
+	if v.ssoRegion == "" {
+		return fmt.Errorf(profileErrorMsg, "sso_region", profileName, defaultSharedConfigFilename)
+	}
+	if v.ssoRoleName == "" {
+		return fmt.Errorf(profileErrorMsg, "sso_role_name", profileName, defaultSharedConfigFilename)
+	}
+	if v.ssoStartUrl == "" {
+		return fmt.Errorf(profileErrorMsg, "sso_start_url", profileName, defaultSharedConfigFilename)
+	}
+	return nil
 }
 
 type cacheFileData struct {
@@ -109,11 +137,6 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 			return nil, err
 		}
 
-		//creds, err := getAwsCredsFromOidcToken(ctx, &cfg, token, *configProfile)
-		//if err != nil {
-		//	return nil, err
-		//}
-
 		cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
 		if err != nil {
 			return nil, err
@@ -162,16 +185,16 @@ func writeCacheFile(cacheFileData cacheFileData, cacheFilePath string) error {
 	return nil
 }
 
-func getConfigProfile(profileName string) (*configProfileStruct, error) {
+func getConfigProfile(profileName string) (*configProfile, error) {
+	var profile configProfile
+	sectionPrefix := "profile"
+
 	defaultSharedConfigFilename := config.DefaultSharedConfigFilename()
 	configFile, err := ini.Load(defaultSharedConfigFilename)
 
-	sectionPrefix := "profile"
-
 	if err != nil {
-		return nil, fmt.Errorf("getProfile Failed to load shared config: %w", err)
+		return nil, fmt.Errorf("getConfigProfile Failed to load shared config: %w", err)
 	}
-	configProfile := new(configProfileStruct)
 
 	for _, section := range configFile.Sections() {
 		sectionName := strings.TrimSpace(section.Name())
@@ -180,66 +203,44 @@ func getConfigProfile(profileName string) (*configProfileStruct, error) {
 			// Not a profile section. We can skip it
 			continue
 		}
-		computedProfileName := strings.TrimSpace(strings.TrimPrefix(sectionName, sectionPrefix))
-		if computedProfileName != profileName {
+		trimmedProfileName := strings.TrimSpace(strings.TrimPrefix(sectionName, sectionPrefix))
+		if trimmedProfileName != profileName {
 			continue
 		}
-
-		configProfile.name = computedProfileName
-
-		output := section.Key("output").Value()
-		if output == "" {
-			output = "json"
+		profile = configProfile{
+			name:         trimmedProfileName,
+			output:       section.Key("output").Value(),
+			region:       section.Key("region").Value(),
+			ssoAccountId: section.Key("sso_account_id").Value(),
+			ssoRegion:    section.Key("sso_region").Value(),
+			ssoRoleName:  section.Key("sso_role_name").Value(),
+			ssoStartUrl:  section.Key("sso_start_url").Value(),
 		}
-		configProfile.output = output
 
-		// There has to  be a better way to do the validation/error composition...
-		profileErrorMsg := "getProfile Failed to find %s for profile %s in config file %s"
-
-		region := section.Key("region").Value()
-		if region == "" {
-			return nil, fmt.Errorf(profileErrorMsg, "region", profileName, defaultSharedConfigFilename)
-		}
-		configProfile.region = region
-
-		ssoAccountId := section.Key("sso_account_id").Value()
-		if ssoAccountId == "" {
-			return nil, fmt.Errorf(profileErrorMsg, "sso_account_id", profileName, defaultSharedConfigFilename)
-		}
-		configProfile.ssoAccountId = ssoAccountId
-
-		ssoRegion := section.Key("sso_region").Value()
-		if ssoRegion == "" {
-			return nil, fmt.Errorf(profileErrorMsg, "sso_region", profileName, defaultSharedConfigFilename)
-		}
-		configProfile.ssoRegion = ssoRegion
-
-		ssoRoleName := section.Key("sso_role_name").Value()
-		if ssoRoleName == "" {
-			return nil, fmt.Errorf(profileErrorMsg, "sso_role_name", profileName, defaultSharedConfigFilename)
-		}
-		configProfile.ssoRoleName = ssoRoleName
-
-		ssoStartUrl := section.Key("sso_start_url").Value()
-		if ssoStartUrl == "" {
-			return nil, fmt.Errorf(profileErrorMsg, "sso_start_url", profileName, defaultSharedConfigFilename)
-		}
 		// The sso_start_url is required to have #/ at the end, or it breaks the cache lookup
-		if !strings.HasSuffix(ssoStartUrl, "#/") {
-			ssoStartUrl = ssoStartUrl + "#/"
+		if !strings.HasSuffix(profile.ssoStartUrl, "#/") {
+			profile.ssoStartUrl = profile.ssoStartUrl + "#/"
 		}
-		configProfile.ssoStartUrl = ssoStartUrl
+		err = profile.validate(profileName, defaultSharedConfigFilename)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	if configProfile.name == "" {
+	// Checks to see if a profile was found
+	if profile.name == "" {
 		return nil, fmt.Errorf("getProfile Failed to find profile %s in config file %s", profileName, defaultSharedConfigFilename)
 	}
-	return configProfile, nil
+	return &profile, nil
 
 }
 
 // getAwsCredsFromCache
-func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *configProfileStruct) (*aws.Credentials, *aws.CredentialsCache, error) {
+func getAwsCredsFromCache(
+	ctx context.Context,
+	cfg *aws.Config,
+	configProfile *configProfile,
+) (*aws.Credentials, *aws.CredentialsCache, error) {
 
 	ssoClient := sso.NewFromConfig(*cfg)
 	ssoOidcClient := ssooidc.NewFromConfig(*cfg)
@@ -266,7 +267,12 @@ func getAwsCredsFromCache(ctx context.Context, cfg *aws.Config, configProfile *c
 	return &creds, credCache, nil
 }
 
-func getAwsCredsFromOidcToken(ctx context.Context, cfg *aws.Config, oidcToken *string, configProfile configProfileStruct) (*aws.Credentials, error) {
+func getAwsCredsFromOidcToken(
+	ctx context.Context,
+	cfg *aws.Config,
+	oidcToken *string,
+	configProfile configProfile,
+) (*aws.Credentials, error) {
 	ssoClient := sso.NewFromConfig(*cfg)
 	creds, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
 		AccessToken: oidcToken,
@@ -285,7 +291,15 @@ func getAwsCredsFromOidcToken(ctx context.Context, cfg *aws.Config, oidcToken *s
 		Expires:         time.UnixMilli(creds.RoleCredentials.Expiration),
 	}, nil
 }
-func ssoLoginFlow(ctx context.Context, cacheFileData *cacheFileData, cfg *aws.Config, configProfile *configProfileStruct, headed bool, loginTimeout time.Duration) (*string, error) {
+
+func ssoLoginFlow(
+	ctx context.Context,
+	cacheFileData *cacheFileData,
+	cfg *aws.Config,
+	configProfile *configProfile,
+	headed bool,
+	loginTimeout time.Duration,
+) (*string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
