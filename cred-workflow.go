@@ -328,7 +328,7 @@ func ssoLoginFlow(
 	token := new(ssooidc.CreateTokenOutput)
 	sleepPerCycle := 2 * time.Second
 	startTime := time.Now()
-	delta := startTime.Sub(time.Now())
+	delta := time.Now().Sub(startTime)
 
 	for delta < loginTimeout {
 		// Keep trying until the user approves the request in the browser
