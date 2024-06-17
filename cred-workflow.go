@@ -95,22 +95,31 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 		creds, credCache, credCacheError = getAwsCredsFromCache(ctx, &cfg, configProfile)
 	}
 	if credCacheError != nil {
-		token, err := ssoLoginFlow(ctx, &cfg, configProfile, params.Headed, params.LoginTimeout)
+		cacheFileData := cacheFileData{
+			StartUrl:              configProfile.ssoStartUrl,
+			Region:                configProfile.region,
+			AccessToken:           "",
+			ExpiresAt:             time.Time{},
+			ClientId:              "",
+			ClientSecret:          "",
+			RegistrationExpiresAt: time.Time{},
+		}
+		_, err := ssoLoginFlow(ctx, &cacheFileData, &cfg, configProfile, params.Headed, params.LoginTimeout)
 		if err != nil {
 			return nil, err
 		}
 
-		creds, err := getAwsCredsFromOidcToken(ctx, &cfg, token, *configProfile)
-		if err != nil {
-			return nil, err
-		}
+		//creds, err := getAwsCredsFromOidcToken(ctx, &cfg, token, *configProfile)
+		//if err != nil {
+		//	return nil, err
+		//}
 
 		cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(configProfile.ssoStartUrl)
 		if err != nil {
 			return nil, err
 		}
 
-		err = writeCacheFile(configProfile, creds, cacheFilePath)
+		err = writeCacheFile(cacheFileData, cacheFilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -134,19 +143,8 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 }
 
 // writeCacheFile Writes the cache file that is read by the AWS CLI.
-func writeCacheFile(configProfile *configProfileStruct, creds *aws.Credentials, cacheFilePath string) error {
-
-	staticCredentials := cacheFileData{
-		StartUrl:              configProfile.ssoStartUrl,
-		Region:                configProfile.region,
-		AccessToken:           creds.SessionToken,
-		ExpiresAt:             time.UnixMilli(creds.Expires.UnixMilli()).UTC(),
-		ClientId:              creds.AccessKeyID,
-		ClientSecret:          creds.SecretAccessKey,
-		RegistrationExpiresAt: time.UnixMilli(creds.Expires.UnixMilli()).UTC(),
-	}
-
-	marshaledJson, err := json.Marshal(staticCredentials)
+func writeCacheFile(cacheFileData cacheFileData, cacheFilePath string) error {
+	marshaledJson, err := json.Marshal(cacheFileData)
 	if err != nil {
 		return fmt.Errorf("writeCacheFile failed to marshal json: %w", err)
 	}
@@ -287,7 +285,7 @@ func getAwsCredsFromOidcToken(ctx context.Context, cfg *aws.Config, oidcToken *s
 		Expires:         time.UnixMilli(creds.RoleCredentials.Expiration),
 	}, nil
 }
-func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *configProfileStruct, headed bool, loginTimeout time.Duration) (*string, error) {
+func ssoLoginFlow(ctx context.Context, cacheFileData *cacheFileData, cfg *aws.Config, configProfile *configProfileStruct, headed bool, loginTimeout time.Duration) (*string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
@@ -304,6 +302,9 @@ func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *configPro
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to register ssoOidcClient: %w", err)
 	}
+	cacheFileData.ClientSecret = *registerClient.ClientSecret
+	cacheFileData.ClientSecret = *registerClient.ClientSecret
+	cacheFileData.ExpiresAt = time.UnixMilli(registerClient.ClientSecretExpiresAt).UTC()
 
 	deviceAuth, err := ssoOidcClient.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
 		ClientId:     registerClient.ClientId,
@@ -344,6 +345,7 @@ func ssoLoginFlow(ctx context.Context, cfg *aws.Config, configProfile *configPro
 	if err != nil {
 		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", err)
 	}
+	cacheFileData.AccessToken = *token.AccessToken
 	return token.AccessToken, nil
 }
 
