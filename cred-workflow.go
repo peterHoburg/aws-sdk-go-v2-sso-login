@@ -303,8 +303,8 @@ func ssoLoginFlow(ctx context.Context, cacheFileData *cacheFileData, cfg *aws.Co
 		return nil, fmt.Errorf("ssoLoginFlow Failed to register ssoOidcClient: %w", err)
 	}
 	cacheFileData.ClientSecret = *registerClient.ClientSecret
-	cacheFileData.ClientSecret = *registerClient.ClientSecret
-	cacheFileData.ExpiresAt = time.UnixMilli(registerClient.ClientSecretExpiresAt).UTC()
+	cacheFileData.ClientId = *registerClient.ClientId
+	cacheFileData.RegistrationExpiresAt = time.Unix(registerClient.ClientSecretExpiresAt, 0).UTC()
 
 	deviceAuth, err := ssoOidcClient.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
 		ClientId:     registerClient.ClientId,
@@ -346,6 +346,7 @@ func ssoLoginFlow(ctx context.Context, cacheFileData *cacheFileData, cfg *aws.Co
 		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", err)
 	}
 	cacheFileData.AccessToken = *token.AccessToken
+	cacheFileData.ExpiresAt = time.Unix(time.Now().Unix()+int64(token.ExpiresIn), 0).UTC()
 	return token.AccessToken, nil
 }
 
