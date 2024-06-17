@@ -3,6 +3,9 @@
 # AWS SDK Go V2 SSO Login
 **THIS IS NOT AN OFFICIAL PART OF aws-sdk-go-v2. This was not created, or endorsed by Amazon, or AWS.**
 
+aws_sdk_go_v2_sso_login implements the AWS SSO OIDC flow, including optionally opening a browser with the AWS SSO
+auth URL.
+
 ## Why This Package Exists
 The official [github.com/aws/aws-sdk-go-v2/service/sso](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/sso)
 does not contain a `login` function. AWS recommends using the AWS CLI `aws sso login` which requires the user has the
