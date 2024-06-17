@@ -116,30 +116,17 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 		return nil, fmt.Errorf("login failed find cached token filepath for profile url %s: %w", profile.ssoStartUrl, err)
 	}
 
-	cfg, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithSharedConfigProfile(profile.name),
-	)
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(profile.name))
 	if err != nil {
 		return nil, fmt.Errorf("login failed to load default config: %w", err)
 	}
 
-	// TODO clean up this logic flow.
-	if params.ForceLogin == true {
-		cacheFile, err := ssoLoginFlow(ctx, &cfg, profile, params.Headed, params.LoginTimeout)
-		if err != nil {
-			return nil, err
-		}
-
-		err = writeCacheFile(cacheFile, cacheFilePath)
-		if err != nil {
-			return nil, err
-		}
-	}
+	// This does not need to be run if ForceLogin is set, but doing it simplifies the overall flow, and is still fast.
 	creds, credCache, credCacheError = getAwsCredsFromCache(ctx, &cfg, profile, cacheFilePath)
 	identity, callerIDError := getCallerID(ctx, &cfg)
 
-	if (credCacheError != nil || callerIDError != nil) && params.ForceLogin == false {
+	// Creds are invalid, try logging in again
+	if credCacheError != nil || callerIDError != nil || params.ForceLogin == true {
 		cacheFile, err := ssoLoginFlow(ctx, &cfg, profile, params.Headed, params.LoginTimeout)
 		if err != nil {
 			return nil, err
@@ -151,11 +138,11 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 		}
 
 		creds, credCache, credCacheError = getAwsCredsFromCache(ctx, &cfg, profile, cacheFilePath)
-		identity, callerIDError = getCallerID(ctx, &cfg)
-	}
+		if credCacheError != nil {
+			return nil, credCacheError
+		}
 
-	if credCacheError != nil {
-		return nil, credCacheError
+		identity, callerIDError = getCallerID(ctx, &cfg)
 	}
 
 	loginOutput := &LoginOutput{
