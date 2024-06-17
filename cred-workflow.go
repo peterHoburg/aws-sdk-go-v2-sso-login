@@ -345,7 +345,7 @@ func ssoLoginFlow(
 		}
 		if strings.Contains(createTokenErr.Error(), "AuthorizationPendingException") {
 			time.Sleep(sleepPerCycle)
-			delta = startTime.Sub(time.Now())
+			delta = time.Now().Sub(startTime)
 			continue
 		}
 	}
