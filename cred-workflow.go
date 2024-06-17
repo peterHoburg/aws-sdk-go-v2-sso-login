@@ -351,7 +351,7 @@ func ssoLoginFlow(
 	}
 	// Checks to see if there is a valid token after the login timeout ends
 	if createTokenErr != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", err)
+		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", createTokenErr)
 	}
 	cacheFile := cacheFileData{
 		StartUrl:              profile.ssoStartUrl,
