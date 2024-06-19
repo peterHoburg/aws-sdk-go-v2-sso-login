@@ -62,29 +62,26 @@ type configProfile struct {
 }
 
 func (v *configProfile) validate(profileName string, defaultSharedConfigFilename string) error {
-	// There has to  be a better way to do the validation/error composition...
-	profileErrorMsg := "configProfile.validate Failed validate %s for profile %s in config file %s"
-
 	if v.name == "" {
-		return fmt.Errorf(profileErrorMsg, "name", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "name", v.name, "<non empty>")
 	}
 	if v.output == "" {
 		v.output = "json"
 	}
 	if v.region == "" {
-		return fmt.Errorf(profileErrorMsg, "region", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "region", v.region, "<non empty>")
 	}
 	if v.ssoAccountId == "" {
-		return fmt.Errorf(profileErrorMsg, "sso_account_id", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "sso_account_id", v.ssoAccountId, "<non empty>")
 	}
 	if v.ssoRegion == "" {
-		return fmt.Errorf(profileErrorMsg, "sso_region", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "sso_region", v.ssoRegion, "<non empty>")
 	}
 	if v.ssoRoleName == "" {
-		return fmt.Errorf(profileErrorMsg, "sso_role_name", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "sso_role_name", v.ssoRoleName, "<non empty>")
 	}
 	if v.ssoStartUrl == "" {
-		return fmt.Errorf(profileErrorMsg, "sso_start_url", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "sso_start_url", v.ssoStartUrl, "<non empty>")
 	}
 	return nil
 }
