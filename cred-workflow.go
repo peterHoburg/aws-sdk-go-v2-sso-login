@@ -22,6 +22,9 @@ import (
 	"gopkg.in/ini.v1"
 )
 
+// TODO update docs at the top of the file for SEO
+// TODO more tests
+// TODO more custom errors.
 type LoginInput struct {
 	// ProfileName name of the profile in ~/.aws/config. [profile <ProfileName>]
 	ProfileName string
@@ -61,27 +64,27 @@ type configProfile struct {
 	ssoStartUrl  string
 }
 
-func (v *configProfile) validate(profileName string, defaultSharedConfigFilename string) error {
+func (v *configProfile) validate(profileName string, configFilePath string) error {
 	if v.name == "" {
-		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "name", v.name, "<non empty>")
+		return NewProfileValidationError(profileName, configFilePath, "name", v.name, "<non empty>")
 	}
 	if v.output == "" {
 		v.output = "json"
 	}
 	if v.region == "" {
-		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "region", v.region, "<non empty>")
+		return NewProfileValidationError(profileName, configFilePath, "region", v.region, "<non empty>")
 	}
 	if v.ssoAccountId == "" {
-		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "sso_account_id", v.ssoAccountId, "<non empty>")
+		return NewProfileValidationError(profileName, configFilePath, "sso_account_id", v.ssoAccountId, "<non empty>")
 	}
 	if v.ssoRegion == "" {
-		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "sso_region", v.ssoRegion, "<non empty>")
+		return NewProfileValidationError(profileName, configFilePath, "sso_region", v.ssoRegion, "<non empty>")
 	}
 	if v.ssoRoleName == "" {
-		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "sso_role_name", v.ssoRoleName, "<non empty>")
+		return NewProfileValidationError(profileName, configFilePath, "sso_role_name", v.ssoRoleName, "<non empty>")
 	}
 	if v.ssoStartUrl == "" {
-		return NewProfileValidationError(profileName, defaultSharedConfigFilename, "sso_start_url", v.ssoStartUrl, "<non empty>")
+		return NewProfileValidationError(profileName, configFilePath, "sso_start_url", v.ssoStartUrl, "<non empty>")
 	}
 	return nil
 }
@@ -103,7 +106,8 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 	var credCache *aws.CredentialsCache
 	var credCacheError error
 
-	profile, err := getConfigProfile(params.ProfileName)
+	configFilePath := config.DefaultSharedConfigFilename()
+	profile, err := getConfigProfile(params.ProfileName, configFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -175,12 +179,11 @@ func writeCacheFile(cacheFileData *cacheFileData, cacheFilePath string) error {
 	return nil
 }
 
-func getConfigProfile(profileName string) (*configProfile, error) {
+func getConfigProfile(profileName string, configFilePath string) (*configProfile, error) {
 	var profile configProfile
 	sectionPrefix := "profile"
 
-	defaultSharedConfigFilename := config.DefaultSharedConfigFilename()
-	configFile, err := ini.Load(defaultSharedConfigFilename)
+	configFile, err := ini.Load(configFilePath)
 
 	if err != nil {
 		return nil, fmt.Errorf("getConfigProfile Failed to load shared config: %w", err)
@@ -211,7 +214,7 @@ func getConfigProfile(profileName string) (*configProfile, error) {
 		if !strings.HasSuffix(profile.ssoStartUrl, "#/") {
 			profile.ssoStartUrl = profile.ssoStartUrl + "#/"
 		}
-		err = profile.validate(profileName, defaultSharedConfigFilename)
+		err = profile.validate(profileName, configFilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -219,7 +222,7 @@ func getConfigProfile(profileName string) (*configProfile, error) {
 
 	// Checks to see if a profile was found
 	if profile.name == "" {
-		return nil, fmt.Errorf("getProfile Failed to find profile %s in config file %s", profileName, defaultSharedConfigFilename)
+		return nil, fmt.Errorf("getProfile Failed to find profile %s in config file %s", profileName, configFilePath)
 	}
 	return &profile, nil
 
