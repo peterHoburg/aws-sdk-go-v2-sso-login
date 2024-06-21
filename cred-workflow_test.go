@@ -1,7 +1,10 @@
 package aws_sdk_go_v2_sso_login
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -11,12 +14,15 @@ func Test_getConfigProfile(t *testing.T) {
 		profileName    string
 		configFilePath string
 	}
-	tempFile, err := os.CreateTemp("", "tempProfiles")
+	ex, err := os.Executable()
 	if err != nil {
-		t.Errorf("Error creating temp profile file: %v", err)
+		panic(err)
 	}
+	exPath := filepath.Dir(ex)
 
-	defer os.Remove(tempFile.Name()) // clean up
+	testConfLocation := exPath + "/test_data/aws_configs"
+	blankConfLocation := testConfLocation + "/blank"
+	missingArgsConfLocation := testConfLocation + "/profiles_missing_args"
 
 	tests := []struct {
 		name           string
@@ -24,28 +30,30 @@ func Test_getConfigProfile(t *testing.T) {
 		want           *configProfile
 		wantErr        bool
 		wantErrorValue error
-		fileValue      string
 	}{
 		{
-			name: "empty profile",
+			name: "missing profile",
 			args: args{
 				profileName:    "",
-				configFilePath: tempFile.Name(),
+				configFilePath: blankConfLocation,
 			},
 			want:           nil,
 			wantErr:        true,
-			wantErrorValue: NewProfileValidationError("", "", "", "", ""),
-			fileValue:      "",
+			wantErrorValue: errors.New(fmt.Sprintf("getProfile Failed to find profile %s in config file %s", "", blankConfLocation)),
+		},
+		{
+			name: "missing name",
+			args: args{
+				profileName:    "missing_name",
+				configFilePath: missingArgsConfLocation,
+			},
+			want:           nil,
+			wantErr:        true,
+			wantErrorValue: NewProfileValidationError("missing_name", missingArgsConfLocation, "name", "", ""),
 		},
 	}
 	for _, test := range tests {
-		_, tempFileWriteError := tempFile.Write([]byte(test.fileValue))
-
 		t.Run(test.name, func(t *testing.T) {
-			if tempFileWriteError != nil {
-				t.Errorf("Failed to write temp file: %v", tempFileWriteError)
-			}
-
 			got, err := getConfigProfile(test.args.profileName, test.args.configFilePath)
 
 			if (err != nil) != test.wantErr {
@@ -53,7 +61,7 @@ func Test_getConfigProfile(t *testing.T) {
 				return
 			}
 			if (err != nil) && test.wantErr {
-				if err != test.wantErrorValue {
+				if !errors.Is(err, test.wantErrorValue) {
 					t.Errorf("getConfigProfile() error = %v, wantErr %v", err, test.wantErrorValue)
 				}
 			}
