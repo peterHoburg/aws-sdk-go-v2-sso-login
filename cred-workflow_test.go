@@ -3,8 +3,6 @@ package aws_sdk_go_v2_sso_login
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -14,15 +12,10 @@ func Test_getConfigProfile(t *testing.T) {
 		profileName    string
 		configFilePath string
 	}
-	ex, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	exPath := filepath.Dir(ex)
 
-	testConfLocation := exPath + "/test_data/aws_configs"
+	testConfLocation := "testdata/aws_configs"
 	blankConfLocation := testConfLocation + "/blank"
-	missingArgsConfLocation := testConfLocation + "/profiles_missing_args"
+	missingArgsConfLocation := testConfLocation + "/profiles.ini"
 
 	tests := []struct {
 		name           string
@@ -42,14 +35,14 @@ func Test_getConfigProfile(t *testing.T) {
 			wantErrorValue: errors.New(fmt.Sprintf("getProfile Failed to find profile %s in config file %s", "", blankConfLocation)),
 		},
 		{
-			name: "missing name",
+			name: "missing region",
 			args: args{
-				profileName:    "missing_name",
+				profileName:    "missing_region",
 				configFilePath: missingArgsConfLocation,
 			},
 			want:           nil,
 			wantErr:        true,
-			wantErrorValue: NewProfileValidationError("missing_name", missingArgsConfLocation, "name", "", ""),
+			wantErrorValue: NewProfileValidationError("missing_region", missingArgsConfLocation, "region", "", "<non empty>"),
 		},
 	}
 	for _, test := range tests {
@@ -61,7 +54,7 @@ func Test_getConfigProfile(t *testing.T) {
 				return
 			}
 			if (err != nil) && test.wantErr {
-				if !errors.Is(err, test.wantErrorValue) {
+				if err.Error() != test.wantErrorValue.Error() {
 					t.Errorf("getConfigProfile() error = %v, wantErr %v", err, test.wantErrorValue)
 				}
 			}
