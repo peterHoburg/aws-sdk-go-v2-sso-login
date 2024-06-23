@@ -114,7 +114,7 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 
 	cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(profile.ssoStartUrl)
 	if err != nil {
-		return nil, fmt.Errorf("login failed find cached token filepath for profile url %s: %w", profile.ssoStartUrl, err)
+		return nil, NewCacheFilepathGenerationError(profile.name, profile.ssoStartUrl, err)
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(profile.name))
@@ -186,7 +186,7 @@ func getConfigProfile(profileName string, configFilePath string) (*configProfile
 	configFile, err := ini.Load(configFilePath)
 
 	if err != nil {
-		return nil, fmt.Errorf("getConfigProfile Failed to load shared config: %w", err)
+		return nil, NewLoadingConfigFileError(configFilePath, err)
 	}
 
 	for _, section := range configFile.Sections() {
@@ -222,7 +222,7 @@ func getConfigProfile(profileName string, configFilePath string) (*configProfile
 
 	// Checks to see if a profile was found
 	if profile.name == "" {
-		return nil, fmt.Errorf("getProfile Failed to find profile %s in config file %s", profileName, configFilePath)
+		return nil, NewMissingProfileError(profileName, configFilePath, err)
 	}
 	return &profile, nil
 
