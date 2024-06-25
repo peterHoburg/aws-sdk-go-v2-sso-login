@@ -1,5 +1,6 @@
-// Package aws_sdk_go_v2_sso_login THIS IS NOT AN OFFICIAL PART OF aws-sdk-go-v2. This was not created, or endorsed by
-// Amazon, or AWS.
+// Package aws_sdk_go_v2_sso_login implements the AWS SSO OIDC flow, including optionally opening a browser with the AWS SSO auth URL.
+//
+// THIS IS NOT AN OFFICIAL PART OF aws-sdk-go-v2. This was not created, endorsed, checked by Amazon/AWS.
 package aws_sdk_go_v2_sso_login
 
 import (
@@ -61,30 +62,27 @@ type configProfile struct {
 	ssoStartUrl  string
 }
 
-func (v *configProfile) validate(profileName string, defaultSharedConfigFilename string) error {
-	// There has to  be a better way to do the validation/error composition...
-	profileErrorMsg := "configProfile.validate Failed validate %s for profile %s in config file %s"
-
+func (v *configProfile) validate(profileName string, configFilePath string) error {
 	if v.name == "" {
-		return fmt.Errorf(profileErrorMsg, "name", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, configFilePath, "name", v.name, "<non empty>")
 	}
 	if v.output == "" {
 		v.output = "json"
 	}
 	if v.region == "" {
-		return fmt.Errorf(profileErrorMsg, "region", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, configFilePath, "region", v.region, "<non empty>")
 	}
 	if v.ssoAccountId == "" {
-		return fmt.Errorf(profileErrorMsg, "sso_account_id", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, configFilePath, "sso_account_id", v.ssoAccountId, "<non empty>")
 	}
 	if v.ssoRegion == "" {
-		return fmt.Errorf(profileErrorMsg, "sso_region", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, configFilePath, "sso_region", v.ssoRegion, "<non empty>")
 	}
 	if v.ssoRoleName == "" {
-		return fmt.Errorf(profileErrorMsg, "sso_role_name", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, configFilePath, "sso_role_name", v.ssoRoleName, "<non empty>")
 	}
 	if v.ssoStartUrl == "" {
-		return fmt.Errorf(profileErrorMsg, "sso_start_url", profileName, defaultSharedConfigFilename)
+		return NewProfileValidationError(profileName, configFilePath, "sso_start_url", v.ssoStartUrl, "<non empty>")
 	}
 	return nil
 }
@@ -106,19 +104,20 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 	var credCache *aws.CredentialsCache
 	var credCacheError error
 
-	profile, err := getConfigProfile(params.ProfileName)
+	configFilePath := config.DefaultSharedConfigFilename()
+	profile, err := getConfigProfile(params.ProfileName, configFilePath)
 	if err != nil {
 		return nil, err
 	}
 
 	cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(profile.ssoStartUrl)
 	if err != nil {
-		return nil, fmt.Errorf("login failed find cached token filepath for profile url %s: %w", profile.ssoStartUrl, err)
+		return nil, NewCacheFilepathGenerationError(profile.name, profile.ssoStartUrl, err)
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(profile.name))
 	if err != nil {
-		return nil, fmt.Errorf("login failed to load default config: %w", err)
+		return nil, ConfigFileLoadError{err}
 	}
 
 	// This does not need to be run if ForceLogin is set, but doing it simplifies the overall flow, and is still fast.
@@ -162,31 +161,30 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 func writeCacheFile(cacheFileData *cacheFileData, cacheFilePath string) error {
 	marshaledJson, err := json.Marshal(cacheFileData)
 	if err != nil {
-		return fmt.Errorf("writeCacheFile failed to marshal json: %w", err)
+		return CacheFileCreationError{err, "failed to marshal json", cacheFilePath}
 	}
 	dir, _ := path.Split(cacheFilePath)
 	err = os.MkdirAll(dir, 0700)
 	if err != nil {
-		return fmt.Errorf("writeCacheFile failed to write dir %s: %w", dir, err)
+		return CacheFileCreationError{err, "failed to create directory", cacheFilePath}
 	}
 
 	err = os.WriteFile(cacheFilePath, marshaledJson, 0600)
 	if err != nil {
-		return fmt.Errorf("writeCacheFile failed to write file %s: %w", cacheFilePath, err)
+		return CacheFileCreationError{err, "failed to write file", cacheFilePath}
 
 	}
 	return nil
 }
 
-func getConfigProfile(profileName string) (*configProfile, error) {
+func getConfigProfile(profileName string, configFilePath string) (*configProfile, error) {
 	var profile configProfile
 	sectionPrefix := "profile"
 
-	defaultSharedConfigFilename := config.DefaultSharedConfigFilename()
-	configFile, err := ini.Load(defaultSharedConfigFilename)
+	configFile, err := ini.Load(configFilePath)
 
 	if err != nil {
-		return nil, fmt.Errorf("getConfigProfile Failed to load shared config: %w", err)
+		return nil, NewLoadingConfigFileError(configFilePath, err)
 	}
 
 	for _, section := range configFile.Sections() {
@@ -214,7 +212,7 @@ func getConfigProfile(profileName string) (*configProfile, error) {
 		if !strings.HasSuffix(profile.ssoStartUrl, "#/") {
 			profile.ssoStartUrl = profile.ssoStartUrl + "#/"
 		}
-		err = profile.validate(profileName, defaultSharedConfigFilename)
+		err = profile.validate(profileName, configFilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -222,10 +220,9 @@ func getConfigProfile(profileName string) (*configProfile, error) {
 
 	// Checks to see if a profile was found
 	if profile.name == "" {
-		return nil, fmt.Errorf("getProfile Failed to find profile %s in config file %s", profileName, defaultSharedConfigFilename)
+		return nil, NewMissingProfileError(profileName, configFilePath, err)
 	}
 	return &profile, nil
-
 }
 
 // getAwsCredsFromCache
@@ -251,7 +248,7 @@ func getAwsCredsFromCache(
 	credCache := aws.NewCredentialsCache(ssoCredsProvider)
 	creds, err := credCache.Retrieve(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("getAwsCredsFromCache Failed to retrieve creds from ssoCredsProvider: %w", err)
+		return nil, nil, CredCacheError{err}
 	}
 	return &creds, credCache, nil
 }
@@ -292,7 +289,7 @@ func ssoLoginFlow(
 
 	currentUser, err := user.Current()
 	if err != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
+		return nil, OsUserError{err}
 	}
 
 	clientName := fmt.Sprintf("%s-%s-%s", currentUser, profile.name, profile.ssoRoleName)
@@ -302,7 +299,7 @@ func ssoLoginFlow(
 		Scopes:     []string{"sso-portal:*"},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to register ssoOidcClient: %w", err)
+		return nil, SsoOidcClientError{err}
 	}
 
 	deviceAuth, err := ssoOidcClient.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
@@ -311,14 +308,14 @@ func ssoLoginFlow(
 		StartUrl:     &profile.ssoStartUrl,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to startDeviceAuthorization: %w", err)
+		return nil, StartDeviceAuthorizationError{err}
 	}
 
 	authUrl := aws.ToString(deviceAuth.VerificationUriComplete)
 	if headed == true {
 		err = browser.OpenURL(authUrl)
 		if err != nil {
-			return nil, fmt.Errorf("ssoLoginFlow Failed to open browser: %w", err)
+			return nil, BrowserOpenError{err}
 		}
 	} else {
 		_, _ = fmt.Fprintf(os.Stderr, "Open the following URL in your browser: %s\n", authUrl)
@@ -351,7 +348,7 @@ func ssoLoginFlow(
 	}
 	// Checks to see if there is a valid token after the login timeout ends
 	if createTokenErr != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", createTokenErr)
+		return nil, SsoOidcTokenCreationError{err}
 	}
 	cacheFile := cacheFileData{
 		StartUrl:              profile.ssoStartUrl,
@@ -370,7 +367,7 @@ func getCallerID(ctx context.Context, cfg *aws.Config) (*sts.GetCallerIdentityOu
 	stsClient := sts.NewFromConfig(*cfg)
 	identity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return nil, fmt.Errorf("getCallerID failed to stsClient.GetCallerIdentity: %w", err)
+		return nil, GetCallerIdError{err}
 	}
 	return identity, nil
 }
