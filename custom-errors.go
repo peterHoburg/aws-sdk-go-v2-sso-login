@@ -1,13 +1,7 @@
 package aws_sdk_go_v2_sso_login
 
 import (
-	"errors"
 	"fmt"
-)
-
-var (
-	ConfigFileLoadError = errors.New("failed to load default config")
-	CredCacheError      = errors.New("failed to retrieve creds from ssoCredsProvider")
 )
 
 // ProfileValidationError error validating the given AWS profile. A required value may be missing.
@@ -96,5 +90,123 @@ func (e CacheFilepathGenerationError) Error() string {
 }
 
 func (e CacheFilepathGenerationError) Unwrap() error {
+	return e.Err
+}
+
+// ConfigFileLoadError failed to load default config
+type ConfigFileLoadError struct {
+	Err error
+}
+
+func (e ConfigFileLoadError) Error() string {
+	return "failed to load default config"
+}
+
+func (e ConfigFileLoadError) Unwrap() error {
+	return e.Err
+}
+
+// CredCacheError failed to retrieve creds from ssoCredsProvider
+type CredCacheError struct {
+	Err error
+}
+
+func (e CredCacheError) Error() string {
+	return "failed to retrieve creds from ssoCredsProvider"
+}
+
+func (e CredCacheError) Unwrap() error {
+	return e.Err
+}
+
+// OsUserError failed to retrieve user from osUser
+type OsUserError struct {
+	Err error
+}
+
+func (e OsUserError) Error() string {
+	return "failed to retrieve user from osUser"
+}
+
+func (e OsUserError) Unwrap() error {
+	return e.Err
+}
+
+// SsoOidcClientError Failed to register ssoOidcClient
+type SsoOidcClientError struct {
+	Err error
+}
+
+func (e SsoOidcClientError) Error() string {
+	return "Failed to register ssoOidcClient"
+}
+
+func (e SsoOidcClientError) Unwrap() error {
+	return e.Err
+}
+
+// StartDeviceAuthorizationError Failed to startDeviceAuthorization
+type StartDeviceAuthorizationError struct {
+	Err error
+}
+
+func (e StartDeviceAuthorizationError) Error() string {
+	return "Failed to startDeviceAuthorization"
+}
+
+func (e StartDeviceAuthorizationError) Unwrap() error {
+	return e.Err
+}
+
+// BrowserOpenError Failed to open a browser
+type BrowserOpenError struct {
+	Err error
+}
+
+func (e BrowserOpenError) Error() string {
+	return "Failed to open a browser"
+}
+
+func (e BrowserOpenError) Unwrap() error {
+	return e.Err
+}
+
+// SsoOidcTokenCreationError failed to retrieve user from osUser
+type SsoOidcTokenCreationError struct {
+	Err error
+}
+
+func (e SsoOidcTokenCreationError) Error() string {
+	return "failed to retrieve user from osUser"
+}
+
+func (e SsoOidcTokenCreationError) Unwrap() error {
+	return e.Err
+}
+
+// GetCallerIdError stsClient.GetCallerIdentity failed
+type GetCallerIdError struct {
+	Err error
+}
+
+func (e GetCallerIdError) Error() string {
+	return "stsClient.GetCallerIdentity failed"
+}
+
+func (e GetCallerIdError) Unwrap() error {
+	return e.Err
+}
+
+type CacheFileCreationError struct {
+	Err           error
+	Reason        string
+	CacheFilePath string
+}
+
+func (e CacheFileCreationError) Error() string {
+	return fmt.Sprintf("Cache file %s creation failed. Reason: %s", e.CacheFilePath, e.Reason)
+}
+
+func (e CacheFileCreationError) Unwrap() error {
 	return e.Err
 }

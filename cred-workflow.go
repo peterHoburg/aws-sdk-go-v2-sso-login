@@ -119,7 +119,7 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(profile.name))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", ConfigFileLoadError, err)
+		return nil, ConfigFileLoadError{err}
 	}
 
 	// This does not need to be run if ForceLogin is set, but doing it simplifies the overall flow, and is still fast.
@@ -163,17 +163,17 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 func writeCacheFile(cacheFileData *cacheFileData, cacheFilePath string) error {
 	marshaledJson, err := json.Marshal(cacheFileData)
 	if err != nil {
-		return fmt.Errorf("writeCacheFile failed to marshal json: %w", err)
+		return CacheFileCreationError{err, "failed to marshal json", cacheFilePath}
 	}
 	dir, _ := path.Split(cacheFilePath)
 	err = os.MkdirAll(dir, 0700)
 	if err != nil {
-		return fmt.Errorf("writeCacheFile failed to write dir %s: %w", dir, err)
+		return CacheFileCreationError{err, "failed to create directory", cacheFilePath}
 	}
 
 	err = os.WriteFile(cacheFilePath, marshaledJson, 0600)
 	if err != nil {
-		return fmt.Errorf("writeCacheFile failed to write file %s: %w", cacheFilePath, err)
+		return CacheFileCreationError{err, "failed to write file", cacheFilePath}
 
 	}
 	return nil
@@ -250,7 +250,7 @@ func getAwsCredsFromCache(
 	credCache := aws.NewCredentialsCache(ssoCredsProvider)
 	creds, err := credCache.Retrieve(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", CredCacheError, err)
+		return nil, nil, CredCacheError{err}
 	}
 	return &creds, credCache, nil
 }
@@ -291,7 +291,7 @@ func ssoLoginFlow(
 
 	currentUser, err := user.Current()
 	if err != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to parse user: %w", err)
+		return nil, OsUserError{err}
 	}
 
 	clientName := fmt.Sprintf("%s-%s-%s", currentUser, profile.name, profile.ssoRoleName)
@@ -301,7 +301,7 @@ func ssoLoginFlow(
 		Scopes:     []string{"sso-portal:*"},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to register ssoOidcClient: %w", err)
+		return nil, SsoOidcClientError{err}
 	}
 
 	deviceAuth, err := ssoOidcClient.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
@@ -310,14 +310,14 @@ func ssoLoginFlow(
 		StartUrl:     &profile.ssoStartUrl,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to startDeviceAuthorization: %w", err)
+		return nil, StartDeviceAuthorizationError{err}
 	}
 
 	authUrl := aws.ToString(deviceAuth.VerificationUriComplete)
 	if headed == true {
 		err = browser.OpenURL(authUrl)
 		if err != nil {
-			return nil, fmt.Errorf("ssoLoginFlow Failed to open browser: %w", err)
+			return nil, BrowserOpenError{err}
 		}
 	} else {
 		_, _ = fmt.Fprintf(os.Stderr, "Open the following URL in your browser: %s\n", authUrl)
@@ -350,7 +350,7 @@ func ssoLoginFlow(
 	}
 	// Checks to see if there is a valid token after the login timeout ends
 	if createTokenErr != nil {
-		return nil, fmt.Errorf("ssoLoginFlow Failed to CreateToken: %w", createTokenErr)
+		return nil, SsoOidcTokenCreationError{err}
 	}
 	cacheFile := cacheFileData{
 		StartUrl:              profile.ssoStartUrl,
@@ -369,7 +369,7 @@ func getCallerID(ctx context.Context, cfg *aws.Config) (*sts.GetCallerIdentityOu
 	stsClient := sts.NewFromConfig(*cfg)
 	identity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return nil, fmt.Errorf("getCallerID failed to stsClient.GetCallerIdentity: %w", err)
+		return nil, GetCallerIdError{err}
 	}
 	return identity, nil
 }
