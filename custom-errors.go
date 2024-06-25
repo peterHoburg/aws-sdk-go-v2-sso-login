@@ -34,7 +34,7 @@ func NewProfileValidationError(profileName string, configFilePath string, fieldN
 // LoadingConfigFileError failed to load the config file
 type LoadingConfigFileError struct {
 	ConfigFilePath string
-	err            error
+	Err            error
 }
 
 func NewLoadingConfigFileError(configFilePath string, err error) LoadingConfigFileError {
@@ -46,13 +46,13 @@ func (e LoadingConfigFileError) Error() string {
 }
 
 func (e LoadingConfigFileError) Unwrap() error {
-	return e.err
+	return e.Err
 }
 
 type MissingProfileError struct {
 	ProfileName    string
 	ConfigFilePath string
-	err            error
+	Err            error
 }
 
 func NewMissingProfileError(profileName string, configFilePath string, err error) MissingProfileError {
@@ -64,14 +64,14 @@ func (e MissingProfileError) Error() string {
 }
 
 func (e MissingProfileError) Unwrap() error {
-	return e.err
+	return e.Err
 }
 
 // CacheFilepathGenerationError failed to generate a valid filepath for the given SSO start URL
 type CacheFilepathGenerationError struct {
 	ProfileName        string
 	ProfileSSOStartURL string
-	err                error
+	Err                error
 }
 
 func NewCacheFilepathGenerationError(ProfileName string, ProfileSSOStartURL string, err error) CacheFilepathGenerationError {
@@ -87,5 +87,5 @@ func (e CacheFilepathGenerationError) Error() string {
 }
 
 func (e CacheFilepathGenerationError) Unwrap() error {
-	return e.err
+	return e.Err
 }

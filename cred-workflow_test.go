@@ -31,7 +31,7 @@ func Test_getConfigProfile(t *testing.T) {
 			},
 			want:           nil,
 			wantErrorValue: NewMissingProfileError("", blankConfLocation, errors.New("")),
-			ErrorAsType:    MissingProfileError{},
+			ErrorAsType:    &MissingProfileError{},
 		},
 		{
 			name: "missing region",
@@ -41,7 +41,7 @@ func Test_getConfigProfile(t *testing.T) {
 			},
 			want:           nil,
 			wantErrorValue: NewProfileValidationError("missing_region", missingArgsConfLocation, "region", "", "<non empty>"),
-			ErrorAsType:    MissingProfileError{},
+			ErrorAsType:    &ProfileValidationError{},
 		},
 	}
 	for _, test := range tests {
@@ -57,7 +57,7 @@ func Test_getConfigProfile(t *testing.T) {
 					t.Errorf("getConfigProfile() error = %v, wantErr %v", err, test.wantErrorValue)
 				}
 				if test.ErrorAsType != nil {
-					if !errors.As(err, &test.ErrorAsType) {
+					if !errors.As(err, test.ErrorAsType) {
 						t.Errorf("getConfigProfile() error = %v, wantErr %v", err, test.ErrorAsType)
 					}
 				}
