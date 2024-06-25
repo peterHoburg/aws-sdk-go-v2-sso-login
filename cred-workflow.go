@@ -1,5 +1,6 @@
-// Package aws_sdk_go_v2_sso_login THIS IS NOT AN OFFICIAL PART OF aws-sdk-go-v2. This was not created, or endorsed by
-// Amazon, or AWS.
+// Package aws_sdk_go_v2_sso_login implements the AWS SSO OIDC flow, including optionally opening a browser with the AWS SSO auth URL.
+//
+// THIS IS NOT AN OFFICIAL PART OF aws-sdk-go-v2. This was not created, endorsed, checked by Amazon/AWS.
 package aws_sdk_go_v2_sso_login
 
 import (
@@ -22,9 +23,6 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-// TODO update docs at the top of the file for SEO
-// TODO more tests
-// TODO more custom errors.
 type LoginInput struct {
 	// ProfileName name of the profile in ~/.aws/config. [profile <ProfileName>]
 	ProfileName string
