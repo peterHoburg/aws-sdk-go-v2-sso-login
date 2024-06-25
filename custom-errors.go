@@ -1,6 +1,14 @@
 package aws_sdk_go_v2_sso_login
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	ConfigFileLoadError = errors.New("failed to load default config")
+	CredCacheError      = errors.New("failed to retrieve creds from ssoCredsProvider")
+)
 
 // ProfileValidationError error validating the given AWS profile. A required value may be missing.
 type ProfileValidationError struct {
@@ -49,6 +57,7 @@ func (e LoadingConfigFileError) Unwrap() error {
 	return e.Err
 }
 
+// MissingProfileError failed to find the requested profile
 type MissingProfileError struct {
 	ProfileName    string
 	ConfigFilePath string

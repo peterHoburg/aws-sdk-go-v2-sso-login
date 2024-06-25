@@ -119,7 +119,7 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(profile.name))
 	if err != nil {
-		return nil, fmt.Errorf("login failed to load default config: %w", err)
+		return nil, fmt.Errorf("%s: %w", ConfigFileLoadError, err)
 	}
 
 	// This does not need to be run if ForceLogin is set, but doing it simplifies the overall flow, and is still fast.
@@ -225,7 +225,6 @@ func getConfigProfile(profileName string, configFilePath string) (*configProfile
 		return nil, NewMissingProfileError(profileName, configFilePath, err)
 	}
 	return &profile, nil
-
 }
 
 // getAwsCredsFromCache
@@ -251,7 +250,7 @@ func getAwsCredsFromCache(
 	credCache := aws.NewCredentialsCache(ssoCredsProvider)
 	creds, err := credCache.Retrieve(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("getAwsCredsFromCache Failed to retrieve creds from ssoCredsProvider: %w", err)
+		return nil, nil, fmt.Errorf("%s: %w", CredCacheError, err)
 	}
 	return &creds, credCache, nil
 }
