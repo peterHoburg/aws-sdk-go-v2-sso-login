@@ -2,6 +2,7 @@ package aws_sdk_go_v2_sso_login
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -76,6 +77,7 @@ func Test_getConfigProfile(t *testing.T) {
 				ssoRegion:    "us-east-1",
 				ssoRoleName:  "readOnly",
 				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
+				ssoSession:   "my-sso",
 			},
 			wantErrorValue: nil,
 			ErrorAsType:    nil,
@@ -102,6 +104,69 @@ func Test_getConfigProfile(t *testing.T) {
 
 			if !reflect.DeepEqual(got, test.want) {
 				t.Errorf("getConfigProfile() got = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func Test_getCacheFilePath(t *testing.T) {
+	userHomeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	type args struct {
+		profile *configProfile
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "sso session",
+			args: args{
+				profile: &configProfile{
+					name:         "name",
+					output:       "output",
+					region:       "region",
+					ssoAccountId: "ssoAccountId",
+					ssoRegion:    "ssoRegion",
+					ssoRoleName:  "ssoRoleName",
+					ssoStartUrl:  "ssoStartUrl",
+					ssoSession:   "ssoSession",
+				},
+			},
+			want:    userHomeDir + "/.aws/sso/cache/1d52a0edb1889e4c71c2ee4839982f54d39d1773.json",
+			wantErr: false,
+		},
+		{
+			name: "no sso session",
+			args: args{
+				profile: &configProfile{
+					name:         "name",
+					output:       "output",
+					region:       "region",
+					ssoAccountId: "ssoAccountId",
+					ssoRegion:    "ssoRegion",
+					ssoRoleName:  "ssoRoleName",
+					ssoStartUrl:  "ssoStartUrl",
+					ssoSession:   "",
+				},
+			},
+			want:    userHomeDir + "/.aws/sso/cache/89cdeb16c173b8923b9a6bf9bc154479f2726122.json",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getCacheFilePath(tt.args.profile)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getCacheFilePath() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("getCacheFilePath() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

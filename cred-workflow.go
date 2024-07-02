@@ -60,6 +60,7 @@ type configProfile struct {
 	ssoRegion    string
 	ssoRoleName  string
 	ssoStartUrl  string
+	ssoSession   string
 }
 
 func (v *configProfile) validate(profileName string, configFilePath string) error {
@@ -109,10 +110,9 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	cacheFilePath, err := ssocreds.StandardCachedTokenFilepath(profile.ssoStartUrl)
+	cacheFilePath, err := getCacheFilePath(profile)
 	if err != nil {
-		return nil, NewCacheFilepathGenerationError(profile.name, profile.ssoStartUrl, err)
+		return nil, err
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(profile.name))
@@ -155,6 +155,23 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 	}
 
 	return loginOutput, nil
+}
+
+func getCacheFilePath(profile *configProfile) (string, error) {
+	var cacheFilePath string
+	var err error
+
+	if profile.ssoSession != "" {
+		cacheFilePath, err = ssocreds.StandardCachedTokenFilepath(profile.ssoSession)
+
+	} else {
+		cacheFilePath, err = ssocreds.StandardCachedTokenFilepath(profile.ssoStartUrl)
+	}
+
+	if err != nil {
+		return "", NewCacheFilepathGenerationError(profile.name, profile.ssoStartUrl, err)
+	}
+	return cacheFilePath, nil
 }
 
 // writeCacheFile Writes the cache file that is read by the AWS CLI.
@@ -216,6 +233,7 @@ func getConfigProfile(profileName string, configFilePath string) (*configProfile
 	}
 	ssoSession := section.Key("sso_session").Value()
 	if ssoSession != "" {
+		profile.ssoSession = ssoSession
 		ssoSessionData := findIniSection(configFile, "sso-session", ssoSession)
 		if ssoSessionData != nil {
 			profile.ssoRegion = ssoSessionData.Key("sso_region").Value()
