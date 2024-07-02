@@ -177,16 +177,16 @@ func writeCacheFile(cacheFileData *cacheFileData, cacheFilePath string) error {
 	return nil
 }
 
-func findIniSection(iniFile *ini.File, sectionType string, sectionName1 string) *ini.Section {
+// findIniSection parses ini file that has sections in [type name] format.
+func findIniSection(iniFile *ini.File, sectionType string, sectionName string) *ini.Section {
 	for _, section := range iniFile.Sections() {
-		parsedSectionName := strings.TrimSpace(section.Name())
+		fullSectionName := strings.TrimSpace(section.Name())
 
-		if !strings.HasPrefix(strings.ToLower(parsedSectionName), sectionType) {
-			// Not a profile section. We can skip it
+		if !strings.HasPrefix(strings.ToLower(fullSectionName), sectionType) {
 			continue
 		}
-		trimmedProfileName := strings.TrimSpace(strings.TrimPrefix(parsedSectionName, sectionType))
-		if trimmedProfileName != sectionName1 {
+		trimmedProfileName := strings.TrimSpace(strings.TrimPrefix(fullSectionName, sectionType))
+		if trimmedProfileName != sectionName {
 			continue
 		}
 		return section
@@ -195,58 +195,43 @@ func findIniSection(iniFile *ini.File, sectionType string, sectionName1 string) 
 }
 
 func getConfigProfile(profileName string, configFilePath string) (*configProfile, error) {
-	var profile configProfile
-	sectionPrefix := "profile"
-
 	configFile, err := ini.Load(configFilePath)
-
 	if err != nil {
 		return nil, NewLoadingConfigFileError(configFilePath, err)
 	}
 
-	for _, section := range configFile.Sections() {
-		sectionName := strings.TrimSpace(section.Name())
-
-		if !strings.HasPrefix(strings.ToLower(sectionName), sectionPrefix) {
-			// Not a profile section. We can skip it
-			continue
-		}
-		trimmedProfileName := strings.TrimSpace(strings.TrimPrefix(sectionName, sectionPrefix))
-		if trimmedProfileName != profileName {
-			continue
-		}
-		profile = configProfile{
-			name:         trimmedProfileName,
-			output:       section.Key("output").Value(),
-			region:       section.Key("region").Value(),
-			ssoAccountId: section.Key("sso_account_id").Value(),
-			ssoRegion:    section.Key("sso_region").Value(),
-			ssoRoleName:  section.Key("sso_role_name").Value(),
-			ssoStartUrl:  section.Key("sso_start_url").Value(),
-		}
-		ssoSession := section.Key("sso_session").Value()
-		if ssoSession != "" {
-			ssoSessionData := findIniSection(configFile, "sso-session", ssoSession)
-			if ssoSessionData != nil {
-				profile.ssoRegion = ssoSessionData.Key("sso_region").Value()
-				profile.ssoStartUrl = ssoSessionData.Key("sso_start_url").Value()
-			}
-		}
-
-		// The sso_start_url is required to have #/ at the end, or it breaks the cache lookup
-		if !strings.HasSuffix(profile.ssoStartUrl, "#/") {
-			profile.ssoStartUrl = profile.ssoStartUrl + "#/"
-		}
-		err = profile.validate(profileName, configFilePath)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Checks to see if a profile was found
-	if profile.name == "" {
+	section := findIniSection(configFile, "profile", profileName)
+	if section == nil {
 		return nil, NewMissingProfileError(profileName, configFilePath, err)
 	}
+
+	profile := configProfile{
+		name:         profileName,
+		output:       section.Key("output").Value(),
+		region:       section.Key("region").Value(),
+		ssoAccountId: section.Key("sso_account_id").Value(),
+		ssoRegion:    section.Key("sso_region").Value(),
+		ssoRoleName:  section.Key("sso_role_name").Value(),
+		ssoStartUrl:  section.Key("sso_start_url").Value(),
+	}
+	ssoSession := section.Key("sso_session").Value()
+	if ssoSession != "" {
+		ssoSessionData := findIniSection(configFile, "sso-session", ssoSession)
+		if ssoSessionData != nil {
+			profile.ssoRegion = ssoSessionData.Key("sso_region").Value()
+			profile.ssoStartUrl = ssoSessionData.Key("sso_start_url").Value()
+		}
+	}
+
+	// The sso_start_url is required to have #/ at the end, or it breaks the cache lookup
+	if !strings.HasSuffix(profile.ssoStartUrl, "#/") {
+		profile.ssoStartUrl = profile.ssoStartUrl + "#/"
+	}
+	err = profile.validate(profileName, configFilePath)
+	if err != nil {
+		return nil, err
+	}
+
 	return &profile, nil
 }
 
