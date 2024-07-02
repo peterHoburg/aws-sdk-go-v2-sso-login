@@ -45,6 +45,24 @@ func Test_getConfigProfile(t *testing.T) {
 			ErrorAsType:    &ProfileValidationError{},
 		},
 		{
+			name: "complete profile",
+			args: args{
+				profileName:    "complete",
+				configFilePath: missingArgsConfLocation,
+			},
+			want: &configProfile{
+				name:         "complete",
+				output:       "output",
+				region:       "us-west-2",
+				ssoAccountId: "sso_account_id",
+				ssoRegion:    "sso_region",
+				ssoRoleName:  "sso_role_name",
+				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
+			},
+			wantErrorValue: nil,
+			ErrorAsType:    nil,
+		},
+		{
 			name: "sso session profile",
 			args: args{
 				profileName:    "session-test",
