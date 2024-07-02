@@ -15,6 +15,7 @@ func Test_getConfigProfile(t *testing.T) {
 	testConfLocation := "testdata/aws_configs"
 	blankConfLocation := testConfLocation + "/blank"
 	missingArgsConfLocation := testConfLocation + "/profiles.ini"
+	ssoSessionConfLocation := testConfLocation + "/sso_session_profiles.ini"
 
 	tests := []struct {
 		name           string
@@ -42,6 +43,24 @@ func Test_getConfigProfile(t *testing.T) {
 			want:           nil,
 			wantErrorValue: NewProfileValidationError("missing_region", missingArgsConfLocation, "region", "", "<non empty>"),
 			ErrorAsType:    &ProfileValidationError{},
+		},
+		{
+			name: "sso session profile",
+			args: args{
+				profileName:    "session-test",
+				configFilePath: ssoSessionConfLocation,
+			},
+			want: &configProfile{
+				name:         "session-test",
+				output:       "json",
+				region:       "us-west-2",
+				ssoAccountId: "123456789011",
+				ssoRegion:    "us-east-1",
+				ssoRoleName:  "readOnly",
+				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
+			},
+			wantErrorValue: nil,
+			ErrorAsType:    nil,
 		},
 	}
 	for _, test := range tests {

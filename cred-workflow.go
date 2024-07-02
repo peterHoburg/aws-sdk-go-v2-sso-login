@@ -177,6 +177,23 @@ func writeCacheFile(cacheFileData *cacheFileData, cacheFilePath string) error {
 	return nil
 }
 
+func findIniSection(iniFile *ini.File, sectionType string, sectionName1 string) *ini.Section {
+	for _, section := range iniFile.Sections() {
+		parsedSectionName := strings.TrimSpace(section.Name())
+
+		if !strings.HasPrefix(strings.ToLower(parsedSectionName), sectionType) {
+			// Not a profile section. We can skip it
+			continue
+		}
+		trimmedProfileName := strings.TrimSpace(strings.TrimPrefix(parsedSectionName, sectionType))
+		if trimmedProfileName != sectionName1 {
+			continue
+		}
+		return section
+	}
+	return nil
+}
+
 func getConfigProfile(profileName string, configFilePath string) (*configProfile, error) {
 	var profile configProfile
 	sectionPrefix := "profile"
@@ -206,6 +223,14 @@ func getConfigProfile(profileName string, configFilePath string) (*configProfile
 			ssoRegion:    section.Key("sso_region").Value(),
 			ssoRoleName:  section.Key("sso_role_name").Value(),
 			ssoStartUrl:  section.Key("sso_start_url").Value(),
+		}
+		ssoSession := section.Key("sso_session").Value()
+		if ssoSession != "" {
+			ssoSessionData := findIniSection(configFile, "sso-session", ssoSession)
+			if ssoSessionData != nil {
+				profile.ssoRegion = ssoSessionData.Key("sso_region").Value()
+				profile.ssoStartUrl = ssoSessionData.Key("sso_start_url").Value()
+			}
 		}
 
 		// The sso_start_url is required to have #/ at the end, or it breaks the cache lookup
