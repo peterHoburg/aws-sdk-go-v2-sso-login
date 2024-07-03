@@ -17,6 +17,7 @@ func Test_getConfigProfile(t *testing.T) {
 	blankConfLocation := testConfLocation + "/blank"
 	missingArgsConfLocation := testConfLocation + "/profiles.ini"
 	ssoSessionConfLocation := testConfLocation + "/sso_session_profiles.ini"
+	defaultOptionsConfLocation := testConfLocation + "/default_options.ini"
 
 	tests := []struct {
 		name           string
@@ -68,6 +69,25 @@ func Test_getConfigProfile(t *testing.T) {
 			args: args{
 				profileName:    "session-test",
 				configFilePath: ssoSessionConfLocation,
+			},
+			want: &configProfile{
+				name:         "session-test",
+				output:       "json",
+				region:       "us-west-2",
+				ssoAccountId: "123456789011",
+				ssoRegion:    "us-east-1",
+				ssoRoleName:  "readOnly",
+				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
+				ssoSession:   "my-sso",
+			},
+			wantErrorValue: nil,
+			ErrorAsType:    nil,
+		},
+		{
+			name: "default and sso session profile",
+			args: args{
+				profileName:    "session-test",
+				configFilePath: defaultOptionsConfLocation,
 			},
 			want: &configProfile{
 				name:         "session-test",
