@@ -102,6 +102,24 @@ func Test_getConfigProfile(t *testing.T) {
 			wantErrorValue: nil,
 			ErrorAsType:    nil,
 		},
+		{
+			name: "default should not override",
+			args: args{
+				profileName:    "defaults-should-not-override",
+				configFilePath: defaultOptionsConfLocation,
+			},
+			want: &configProfile{
+				name:         "defaults-should-not-override",
+				output:       "output",
+				region:       "region",
+				ssoAccountId: "sso_account_id",
+				ssoRegion:    "sso_region",
+				ssoRoleName:  "sso_role_name",
+				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
+			},
+			wantErrorValue: nil,
+			ErrorAsType:    nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
