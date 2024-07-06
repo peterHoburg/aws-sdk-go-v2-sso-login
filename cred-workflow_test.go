@@ -2,8 +2,11 @@ package aws_sdk_go_v2_sso_login
 
 import (
 	"errors"
+	"github.com/google/uuid"
+	"io/fs"
 	"os"
 	"reflect"
+	"syscall"
 	"testing"
 )
 
@@ -13,6 +16,7 @@ func Test_getConfigProfile(t *testing.T) {
 		configFilePath string
 	}
 
+	fakeFileLocation := uuid.New().String()
 	testConfLocation := "testdata/aws_configs"
 	blankConfLocation := testConfLocation + "/blank"
 	missingArgsConfLocation := testConfLocation + "/profiles.ini"
@@ -26,6 +30,16 @@ func Test_getConfigProfile(t *testing.T) {
 		wantErrorValue error
 		ErrorAsType    any
 	}{
+		{
+			name: "missing config file",
+			args: args{
+				profileName:    "",
+				configFilePath: fakeFileLocation,
+			},
+			want:           nil,
+			wantErrorValue: NewLoadingConfigFileError(fakeFileLocation, &fs.PathError{Op: "open", Path: fakeFileLocation, Err: syscall.Errno(2)}),
+			ErrorAsType:    &LoadingConfigFileError{},
+		},
 		{
 			name: "missing profile",
 			args: args{
