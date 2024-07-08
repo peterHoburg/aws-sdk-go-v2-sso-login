@@ -1,8 +1,8 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/peterHoburg/aws-sdk-go-v2-sso-login.svg)](https://pkg.go.dev/github.com/peterHoburg/aws-sdk-go-v2-sso-login)
 [![Go Report Card](https://goreportcard.com/badge/github.com/peterHoburg/aws-sdk-go-v2-sso-login)](https://goreportcard.com/report/github.com/peterHoburg/aws-sdk-go-v2-sso-login)
 [![Go](https://github.com/peterHoburg/aws-sdk-go-v2-sso-login/actions/workflows/go.yml/badge.svg)](https://github.com/peterHoburg/aws-sdk-go-v2-sso-login/actions/workflows/go.yml)
+[![codecov](https://codecov.io/github/peterHoburg/aws-sdk-go-v2-sso-login/graph/badge.svg?token=RIGY9A125D)](https://codecov.io/github/peterHoburg/aws-sdk-go-v2-sso-login)
 [![Release](https://img.shields.io/github/v/release/peterHoburg/aws-sdk-go-v2-sso-login)](https://github.com/peterHoburg/aws-sdk-go-v2-sso-login/releases)
-![GitHub Release](https://img.shields.io/github/v/release/peterHoburg/aws-sdk-go-v2-sso-login)
 
 # AWS SDK Go V2 SSO Login
 Package aws_sdk_go_v2_sso_login implements the AWS SSO OIDC flow, including optionally opening a browser with the AWS SSO auth URL.
