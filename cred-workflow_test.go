@@ -2,8 +2,11 @@ package aws_sdk_go_v2_sso_login
 
 import (
 	"errors"
+	"github.com/google/uuid"
+	"io/fs"
 	"os"
 	"reflect"
+	"syscall"
 	"testing"
 )
 
@@ -13,10 +16,12 @@ func Test_getConfigProfile(t *testing.T) {
 		configFilePath string
 	}
 
+	fakeFileLocation := uuid.New().String()
 	testConfLocation := "testdata/aws_configs"
 	blankConfLocation := testConfLocation + "/blank"
 	missingArgsConfLocation := testConfLocation + "/profiles.ini"
 	ssoSessionConfLocation := testConfLocation + "/sso_session_profiles.ini"
+	defaultOptionsConfLocation := testConfLocation + "/default_options.ini"
 
 	tests := []struct {
 		name           string
@@ -25,6 +30,16 @@ func Test_getConfigProfile(t *testing.T) {
 		wantErrorValue error
 		ErrorAsType    any
 	}{
+		{
+			name: "missing config file",
+			args: args{
+				profileName:    "",
+				configFilePath: fakeFileLocation,
+			},
+			want:           nil,
+			wantErrorValue: NewLoadingConfigFileError(fakeFileLocation, &fs.PathError{Op: "open", Path: fakeFileLocation, Err: syscall.Errno(2)}),
+			ErrorAsType:    &LoadingConfigFileError{},
+		},
 		{
 			name: "missing profile",
 			args: args{
@@ -78,6 +93,43 @@ func Test_getConfigProfile(t *testing.T) {
 				ssoRoleName:  "readOnly",
 				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
 				ssoSession:   "my-sso",
+			},
+			wantErrorValue: nil,
+			ErrorAsType:    nil,
+		},
+		{
+			name: "default and sso session profile",
+			args: args{
+				profileName:    "session-test",
+				configFilePath: defaultOptionsConfLocation,
+			},
+			want: &configProfile{
+				name:         "session-test",
+				output:       "json",
+				region:       "us-west-2",
+				ssoAccountId: "123456789011",
+				ssoRegion:    "us-east-1",
+				ssoRoleName:  "readOnly",
+				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
+				ssoSession:   "my-sso",
+			},
+			wantErrorValue: nil,
+			ErrorAsType:    nil,
+		},
+		{
+			name: "default should not override",
+			args: args{
+				profileName:    "defaults-should-not-override",
+				configFilePath: defaultOptionsConfLocation,
+			},
+			want: &configProfile{
+				name:         "defaults-should-not-override",
+				output:       "output",
+				region:       "region",
+				ssoAccountId: "sso_account_id",
+				ssoRegion:    "sso_region",
+				ssoRoleName:  "sso_role_name",
+				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
 			},
 			wantErrorValue: nil,
 			ErrorAsType:    nil,

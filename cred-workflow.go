@@ -211,8 +211,24 @@ func findIniSection(iniFile *ini.File, sectionType string, sectionName string) *
 	return nil
 }
 
+// setDefaults I tried doing this dynamically with reflection and some fun camelCase shenanigans,
+// but configProfile fields would need to be public, and I don't care that much.
+func setDefaults(profile *configProfile, defaultSection *ini.Section) {
+	if defaultSection == nil {
+		return
+	}
+	if profile.region == "" {
+		profile.region = defaultSection.Key("region").String()
+	}
+	if profile.output == "" {
+		profile.output = defaultSection.Key("output").String()
+	}
+}
+
 func getConfigProfile(profileName string, configFilePath string) (*configProfile, error) {
-	configFile, err := ini.Load(configFilePath)
+	// You have to set IgnoreInlineComment: true because ...start#/ is common in the sso_start_url
+	// gopkg.in/ini.v1@v1.67.0/parser.go:281 will remove everything after #
+	configFile, err := ini.LoadSources(ini.LoadOptions{IgnoreInlineComment: true}, configFilePath)
 	if err != nil {
 		return nil, NewLoadingConfigFileError(configFilePath, err)
 	}
@@ -240,6 +256,9 @@ func getConfigProfile(profileName string, configFilePath string) (*configProfile
 			profile.ssoStartUrl = ssoSessionData.Key("sso_start_url").Value()
 		}
 	}
+
+	defaultSection := findIniSection(configFile, "default", "")
+	setDefaults(&profile, defaultSection)
 
 	// The sso_start_url is required to have #/ at the end, or it breaks the cache lookup
 	if !strings.HasSuffix(profile.ssoStartUrl, "#/") {
