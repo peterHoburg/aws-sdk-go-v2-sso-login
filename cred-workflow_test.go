@@ -1,6 +1,7 @@
 package aws_sdk_go_v2_sso_login
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
 	"io/fs"
@@ -8,6 +9,7 @@ import (
 	"reflect"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func Test_getConfigProfile(t *testing.T) {
@@ -61,6 +63,46 @@ func Test_getConfigProfile(t *testing.T) {
 			ErrorAsType:    &ProfileValidationError{},
 		},
 		{
+			name: "missing_sso_account_id",
+			args: args{
+				profileName:    "missing_sso_account_id",
+				configFilePath: missingArgsConfLocation,
+			},
+			want:           nil,
+			wantErrorValue: NewProfileValidationError("missing_sso_account_id", missingArgsConfLocation, "sso_account_id", "", "<non empty>"),
+			ErrorAsType:    &ProfileValidationError{},
+		},
+		{
+			name: "missing_sso_region",
+			args: args{
+				profileName:    "missing_sso_region",
+				configFilePath: missingArgsConfLocation,
+			},
+			want:           nil,
+			wantErrorValue: NewProfileValidationError("missing_sso_region", missingArgsConfLocation, "sso_region", "", "<non empty>"),
+			ErrorAsType:    &ProfileValidationError{},
+		},
+		{
+			name: "missing_sso_role_name",
+			args: args{
+				profileName:    "missing_sso_role_name",
+				configFilePath: missingArgsConfLocation,
+			},
+			want:           nil,
+			wantErrorValue: NewProfileValidationError("missing_sso_role_name", missingArgsConfLocation, "sso_role_name", "", "<non empty>"),
+			ErrorAsType:    &ProfileValidationError{},
+		},
+		{
+			name: "missing_sso_start_url",
+			args: args{
+				profileName:    "missing_sso_start_url",
+				configFilePath: missingArgsConfLocation,
+			},
+			want:           nil,
+			wantErrorValue: NewProfileValidationError("missing_sso_start_url", missingArgsConfLocation, "sso_start_url", "", "<non empty>"),
+			ErrorAsType:    &ProfileValidationError{},
+		},
+		{
 			name: "complete profile",
 			args: args{
 				profileName:    "complete",
@@ -69,6 +111,24 @@ func Test_getConfigProfile(t *testing.T) {
 			want: &configProfile{
 				name:         "complete",
 				output:       "output",
+				region:       "us-west-2",
+				ssoAccountId: "sso_account_id",
+				ssoRegion:    "sso_region",
+				ssoRoleName:  "sso_role_name",
+				ssoStartUrl:  "https://my-sso-portal.awsapps.com/start#/",
+			},
+			wantErrorValue: nil,
+			ErrorAsType:    nil,
+		},
+		{
+			name: "missing output",
+			args: args{
+				profileName:    "missing_output",
+				configFilePath: missingArgsConfLocation,
+			},
+			want: &configProfile{
+				name:         "missing_output",
+				output:       "json",
 				region:       "us-west-2",
 				ssoAccountId: "sso_account_id",
 				ssoRegion:    "sso_region",
@@ -219,6 +279,65 @@ func Test_getCacheFilePath(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("getCacheFilePath() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_writeCacheFile(t *testing.T) {
+	userHomeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type args struct {
+		cacheFileData *cacheFileData
+		cacheFilePath string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "",
+			args: args{
+				cacheFileData: &cacheFileData{
+					StartUrl:              "StartUrl",
+					Region:                "Region",
+					AccessToken:           "AccessToken",
+					ExpiresAt:             time.Time{},
+					ClientId:              "ClientId",
+					ClientSecret:          "ClientSecret",
+					RegistrationExpiresAt: time.Time{},
+				},
+				cacheFilePath: "",
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cacheDirPath := userHomeDir + "/" + uuid.New().String()
+			cacheFilePath := cacheDirPath + "/fake.json"
+			defer os.RemoveAll(cacheDirPath)
+
+			tt.args.cacheFilePath = cacheFilePath
+
+			if err := writeCacheFile(tt.args.cacheFileData, tt.args.cacheFilePath); (err != nil) != tt.wantErr {
+				t.Errorf("writeCacheFile() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			plan, _ := os.ReadFile(cacheFilePath)
+			var data cacheFileData
+			err := json.Unmarshal(plan, &data)
+
+			if err != nil {
+				t.Errorf("writeCacheFile() failed to unmarshal chache json")
+			}
+
+			if data != *tt.args.cacheFileData {
+				t.Errorf("writeCacheFile() got = %v, want %v", data, tt.args.cacheFileData)
 			}
 		})
 	}
