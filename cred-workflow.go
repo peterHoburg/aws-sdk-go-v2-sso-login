@@ -260,10 +260,6 @@ func getConfigProfile(profileName string, configFilePath string) (*configProfile
 	defaultSection := findIniSection(configFile, "default", "")
 	setDefaults(&profile, defaultSection)
 
-	// The sso_start_url is required to have #/ at the end, or it breaks the cache lookup
-	if !strings.HasSuffix(profile.ssoStartUrl, "#/") {
-		profile.ssoStartUrl = profile.ssoStartUrl + "#/"
-	}
 	err = profile.validate(profileName, configFilePath)
 	if err != nil {
 		return nil, err
