@@ -1,8 +1,11 @@
 package aws_sdk_go_v2_sso_login
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/google/uuid"
 	"io/fs"
 	"os"
@@ -338,6 +341,80 @@ func Test_writeCacheFile(t *testing.T) {
 
 			if data != *tt.args.cacheFileData {
 				t.Errorf("writeCacheFile() got = %v, want %v", data, tt.args.cacheFileData)
+			}
+		})
+	}
+}
+
+func Test_getAwsCredsFromCache(t *testing.T) {
+	testConfLocation := "testdata/aws_configs"
+	profilesLocation := testConfLocation + "/profiles.ini"
+
+	type args struct {
+		ctx           context.Context
+		cfg           *aws.Config
+		profile       *configProfile
+		cacheFilePath string
+	}
+	tests := []struct {
+		name           string
+		profileName    string
+		args           args
+		want           *aws.Credentials
+		want1          *aws.CredentialsCache
+		wantErrorValue error
+	}{
+		{
+			name:        "",
+			profileName: "complete",
+			args: args{
+				ctx: context.Background(),
+				cfg: nil,
+				profile: &configProfile{
+					name:         "",
+					output:       "",
+					region:       "",
+					ssoAccountId: "",
+					ssoRegion:    "",
+					ssoRoleName:  "",
+					ssoStartUrl:  "",
+					ssoSession:   "",
+				},
+				cacheFilePath: "",
+			},
+			want:           nil,
+			want1:          nil,
+			wantErrorValue: CredCacheError{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sharedConfigFileLocations []string
+			sharedConfigFileLocations = append(sharedConfigFileLocations, profilesLocation)
+			sharedConfigProfile := config.WithSharedConfigProfile(tt.profileName)
+			sharedConfigFile := config.WithSharedConfigFiles(sharedConfigFileLocations)
+
+			cfg, err := config.LoadDefaultConfig(context.Background(), sharedConfigProfile, sharedConfigFile)
+			if err != nil {
+				panic(err)
+			}
+			tt.args.cfg = &cfg
+
+			got, got1, err := getAwsCredsFromCache(tt.args.ctx, tt.args.cfg, tt.args.profile, tt.args.cacheFilePath)
+			if (err != nil) && tt.wantErrorValue == nil {
+				t.Errorf("getAwsCredsFromCache() error = %v, wantErr %v", err, tt.wantErrorValue)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getAwsCredsFromCache() got = %v, want %v", got, tt.want)
+			}
+			if !reflect.DeepEqual(got1, tt.want1) {
+				t.Errorf("getAwsCredsFromCache() got1 = %v, want %v", got1, tt.want1)
+			}
+			if (err != nil) && tt.wantErrorValue != nil {
+				if err.Error() != tt.wantErrorValue.Error() {
+					t.Errorf("getConfigProfile() error = %v, wantErr %v", err, tt.wantErrorValue)
+				}
 			}
 		})
 	}
