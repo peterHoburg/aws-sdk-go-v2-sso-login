@@ -419,3 +419,66 @@ func Test_getAwsCredsFromCache(t *testing.T) {
 		})
 	}
 }
+
+func Test_ssoLoginFlow(t *testing.T) {
+	testConfLocation := "testdata/aws_configs"
+	profilesLocation := testConfLocation + "/profiles.ini"
+
+	type args struct {
+		ctx          context.Context
+		cfg          *aws.Config
+		profile      *configProfile
+		headed       bool
+		loginTimeout time.Duration
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *cacheFileData
+		wantErr bool
+	}{
+		{
+			name: "",
+			args: args{
+				ctx: context.Background(),
+				profile: &configProfile{
+					name:         "",
+					output:       "",
+					region:       "",
+					ssoAccountId: "",
+					ssoRegion:    "",
+					ssoRoleName:  "",
+					ssoStartUrl:  "",
+					ssoSession:   "",
+				},
+				headed:       false,
+				loginTimeout: 0,
+			},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sharedConfigFileLocations []string
+			sharedConfigFileLocations = append(sharedConfigFileLocations, profilesLocation)
+			sharedConfigProfile := config.WithSharedConfigProfile("complete")
+			sharedConfigFile := config.WithSharedConfigFiles(sharedConfigFileLocations)
+
+			cfg, err := config.LoadDefaultConfig(context.Background(), sharedConfigProfile, sharedConfigFile)
+			if err != nil {
+				panic(err)
+			}
+			tt.args.cfg = &cfg
+
+			got, err := ssoLoginFlow(tt.args.ctx, tt.args.cfg, tt.args.profile, tt.args.headed, tt.args.loginTimeout)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ssoLoginFlow() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ssoLoginFlow() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
