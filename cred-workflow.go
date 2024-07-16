@@ -260,10 +260,6 @@ func getConfigProfile(profileName string, configFilePath string) (*configProfile
 	defaultSection := findIniSection(configFile, "default", "")
 	setDefaults(&profile, defaultSection)
 
-	// The sso_start_url is required to have #/ at the end, or it breaks the cache lookup
-	if !strings.HasSuffix(profile.ssoStartUrl, "#/") {
-		profile.ssoStartUrl = profile.ssoStartUrl + "#/"
-	}
 	err = profile.validate(profileName, configFilePath)
 	if err != nil {
 		return nil, err
@@ -298,31 +294,6 @@ func getAwsCredsFromCache(
 		return nil, nil, CredCacheError{err}
 	}
 	return &creds, credCache, nil
-}
-
-func getAwsCredsFromOidcToken(
-	ctx context.Context,
-	cfg *aws.Config,
-	oidcToken *string,
-	configProfile configProfile,
-) (*aws.Credentials, error) {
-	ssoClient := sso.NewFromConfig(*cfg)
-	creds, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
-		AccessToken: oidcToken,
-		AccountId:   &configProfile.ssoAccountId,
-		RoleName:    &configProfile.ssoRoleName,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("getAwsCredsFromOidcToken failed to ssoClient.GetRoleCredentials: %w", err)
-	}
-	return &aws.Credentials{
-		AccessKeyID:     *creds.RoleCredentials.AccessKeyId,
-		SecretAccessKey: *creds.RoleCredentials.SecretAccessKey,
-		SessionToken:    *creds.RoleCredentials.SessionToken,
-		Source:          "",
-		CanExpire:       true,
-		Expires:         time.UnixMilli(creds.RoleCredentials.Expiration),
-	}, nil
 }
 
 func ssoLoginFlow(
