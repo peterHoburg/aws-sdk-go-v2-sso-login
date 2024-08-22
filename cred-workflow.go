@@ -115,7 +115,13 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 		return nil, err
 	}
 
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(profile.name))
+	cfg, err := config.LoadDefaultConfig(
+		ctx,
+		config.WithSharedConfigProfile(profile.name),
+		// This is required because having a [default] with region in aws config will break. For
+		// some reason AWS GO-v2 doesn't honor it [default]. ¯\_(ツ)_/¯
+		config.WithRegion(profile.region),
+	)
 	if err != nil {
 		return nil, ConfigFileLoadError{err}
 	}
