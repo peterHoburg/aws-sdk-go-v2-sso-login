@@ -27,7 +27,7 @@ type LoginInput struct {
 	// ProfileName name of the profile in ~/.aws/config. [profile <ProfileName>]
 	ProfileName string
 
-	// LoginTimeout max time to wait for user to complete the SSO OIDC URL flow. This should be > 60 seconds.
+	// LoginTimeout max time to wait for user to complete the SSO OIDC URL flow. This should be > 60 seconds. Default value is 90 seconds
 	LoginTimeout time.Duration
 
 	// Headed if true a browser will be opened with the URL for the SSO OIDC flow. You will have the [LoginTimeout] to
@@ -36,6 +36,13 @@ type LoginInput struct {
 
 	// ForceLogin if true forces a new SSO OIDC flow even if the cached creds are still valid.
 	ForceLogin bool
+}
+
+func (v *LoginInput) validate() error {
+	if v.LoginTimeout == 0 {
+		v.LoginTimeout = 90 * time.Second
+	}
+	return nil
 }
 
 // IdentityResult contains the result of stsClient.GetCallerIdentity. If Identity is nul and error is not nul that
@@ -104,6 +111,11 @@ func Login(ctx context.Context, params *LoginInput) (*LoginOutput, error) {
 	var creds *aws.Credentials
 	var credCache *aws.CredentialsCache
 	var credCacheError error
+
+	err := params.validate()
+	if err != nil {
+		return nil, err
+	}
 
 	configFilePath := config.DefaultSharedConfigFilename()
 	profile, err := getConfigProfile(params.ProfileName, configFilePath)
@@ -371,7 +383,7 @@ func ssoLoginFlow(
 		}
 	}
 	// Checks to see if there is a valid token after the login timeout ends
-	if createTokenErr != nil {
+	if createTokenErr != nil || token.AccessToken == nil {
 		return nil, SsoOidcTokenCreationError{err}
 	}
 	cacheFile := cacheFileData{
